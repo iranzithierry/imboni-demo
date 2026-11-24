@@ -1,0 +1,124 @@
+{
+  "expo": {
+    "name": "Imboni",
+    "slug": "imboni",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "imboni",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "dev.iranzi.imboni",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Imboni shows where you are on the road advisories map. Your location never leaves this iPhone."
+      }
+    },
+    "android": {
+      "package": "dev.iranzi.imboni",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A52E9",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      "expo-localization",
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "color": "#0A52E9"
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": false,
+          "remindersPermission": false,
+          "writeOnlyCalendarPermission": "Imboni adds deadlines and events you choose to your calendar. It never reads your existing events.",
+          "writeOnlyAccess": true
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "savePhotosPermission": "Imboni saves share cards you create to your photo library."
+        }
+      ],
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "Deadline",
+              "displayName": "Next deadline",
+              "description": "Days left on the tracked action that is due soonest.",
+              "ios": {
+                "supportedFamilies": [
+                  "accessoryCircular",
+                  "accessoryInline",
+                  "systemSmall"
+                ],
+                "initialLayout": "src/widgets/deadline.tsx"
+              },
+              "android": null
+            },
+            {
+              "name": "NextEvent",
+              "displayName": "Next event",
+              "description": "The next calendar event from institutions you follow.",
+              "ios": {
+                "supportedFamilies": [
+                  "accessoryRectangular"
+                ],
+                "initialLayout": "src/widgets/next-event.tsx"
+              },
+              "android": null
+            },
+            {
+              "name": "Rate",
+              "displayName": "Exchange rate",
+              "description": "The BNR reference rate for your first watched currency.",
+              "ios": {
+                "supportedFamilies": [
+                  "accessoryCircular"
+                ],
+                "initialLayout": "src/widgets/rate.tsx"
+              },
+              "android": null
+            }
+          ]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
