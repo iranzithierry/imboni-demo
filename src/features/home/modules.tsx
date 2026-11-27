@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
+import { Fragment } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeOut, LinearTransition, SlideInUp } from 'react-native-reanimated';
+import Animated, { FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { useApi } from '@/data/api';
 import { q } from '@/data/queries';
@@ -10,36 +11,60 @@ import { haptic } from '@/lib/haptics';
 import { toHref } from '@/lib/links';
 import { windowRemaining, type TrackRow } from '@/lib/tracking';
 import { usePrefs } from '@/state/prefs';
-import { DateBadge, Skeleton, Tile } from '@/ui/atoms';
-import { CapButton, CircleButton } from '@/ui/button';
-import { Cell, Group, INSET, SectionTitle } from '@/ui/list';
-import { PressableScale } from '@/ui/pressable';
-import { Ring } from '@/ui/ring';
+import { Bar, Skeleton, Tag } from '@/ui/atoms';
+import { Button, IconButton, TextAction } from '@/ui/button';
+import { FeatureIcon, type FeatureIconName } from '@/illustrations/icons';
+import { Icon } from '@/ui/icon';
+import { Rule, SectionHeader } from '@/ui/list';
+import { InstitutionLogo } from '@/ui/logo';
+import { Highlight, PressableScale } from '@/ui/pressable';
 import { RetryLine } from '@/ui/states';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, GUTTER, motion, radius, useColors, type Palette } from '@/ui/theme';
+import { useToast } from '@/ui/toast';
 
 import { useInstitutionLookup, useNow } from '../data';
+import { useMenu } from '../record/menu';
+import { useTracker } from '../tracking';
+import { SwipeRow, useTrackRowActions } from '../tracking/swipe-row';
 
+const layout = LinearTransition.duration(motion.base);
+
+/** Active safety alert for the person's area. Severity is carried by icon, word and colour together. */
 export function SafetyBanner() {
+  const colors = useColors();
+  const styles = useStyles();
   const { data } = useQuery(q.safetyAlerts(useApi()));
   const dismissed = usePrefs((s) => s.dismissedAlerts);
   const set = usePrefs((s) => s.set);
   const now = useNow().getTime();
+  const lookup = useInstitutionLookup();
   const alert = data?.find((a) => !dismissed.includes(a.id) && new Date(a.until).getTime() > now);
   if (!alert) return null;
   return (
-    <Animated.View entering={SlideInUp.springify().damping(18)} exiting={FadeOut} style={styles.banner} accessibilityRole="alert">
-      <Tile icon="rain" color="red" size="m" />
-      <View style={{ flex: 1 }}>
-        <Txt v="sh" w="600">
-          {alert.title}
-        </Txt>
-        <Txt v="fn" c={colors.l2}>{`${alert.area} · until ${formatTime(alert.until)} · ${alert.advice}`}</Txt>
-      </View>
-      <CircleButton
+    <Animated.View exiting={FadeOut.duration(motion.fast)} layout={layout} style={[styles.bannerWrap, styles.banner]}>
+      <Highlight
+        accessibilityRole="button"
+        accessibilityLabel={`Alert, ${alert.severity}. ${alert.title}. ${alert.area}, until ${formatTime(alert.until)}. ${alert.advice}.`}
+        onPress={() => router.push(toHref({ kind: 'alert', id: alert.id }))}
+        pressedStyle={{ opacity: 0.85 }}
+        style={styles.bannerBody}>
+        <View style={styles.bannerIcon}>
+          <Icon name="rain" size={20} color={colors.bad} weight="semibold" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Txt v="caption" c={colors.bad} num>{`${alert.severity === 'warning' ? 'Warning' : 'Watch'} · ${lookup(alert.issuerId).name} · until ${formatTime(alert.until)}`}</Txt>
+          <Txt v="headline" style={{ marginTop: 2 }}>
+            {alert.title}
+          </Txt>
+          <Txt v="footnote" c={colors.ink2}>{`${alert.area} · ${alert.advice}`}</Txt>
+        </View>
+      </Highlight>
+      <IconButton
         icon="xmark"
-        label="Dismiss"
+        label="Dismiss alert"
+        variant="plain"
+        size={32}
         onPress={() => {
           haptic.tap();
           set('dismissedAlerts', [...dismissed, alert.id]);
@@ -49,178 +74,198 @@ export function SafetyBanner() {
   );
 }
 
+/** The tracked action due soonest: a quiet card where only the days left carry the accent. */
 export function UpNext({ row, today }: { row: TrackRow; today: string }) {
-  const lookup = useInstitutionLookup();
-  const { action, daysLeft, done, tracked } = row;
+  const colors = useColors();
+  const styles = useStyles();
+  const inst = useInstitutionLookup()(row.action.institutionId);
+  const tracker = useTracker();
+  const toast = useToast();
+  const menu = useMenu();
+  const { action, daysLeft, done, tracked, open } = row;
   const phase = action.phases.find((p) => p.from <= today && today <= p.to);
+
+  const markDone = (copyId: string, label: string) => {
+    haptic.success();
+    tracker.setDone(action, copyId, true).catch(() => undefined);
+    toast({ message: `Marked done for ${label}`, icon: 'checkCircle', action: { label: 'Undo', onPress: () => tracker.setDone(action, copyId, false).catch(() => undefined) } });
+  };
+  const onDone = () => {
+    if (open.length === 1 && open[0]) return markDone(open[0].id, open[0].label);
+    menu(
+      open.map((c) => ({ label: `Done for ${c.label}`, onPress: () => markDone(c.id, c.label) })),
+      'Mark done',
+      'Each person’s copy is marked on its own.',
+    );
+  };
+
   return (
-    <PressableScale feedback="tap" accessibilityRole="button" accessibilityLabel={`Up next: ${action.title}, ${daysLeft} days left`} onPress={() => router.push(toHref({ kind: 'action', id: action.id }))} style={styles.upNext}>
-      <View style={styles.row16}>
-        <Ring size={92} stroke={12} progress={windowRemaining(action, today)} color={colors.orange} trackColor="rgba(255,149,0,0.25)">
-          <Txt num c={colors.white} style={{ fontSize: 30, lineHeight: 30, fontWeight: '700' }}>
-            {daysLeft}
-          </Txt>
-          <Txt v="c2" c={colors.dark.l2}>
-            {daysLeft === 1 ? 'day' : 'days'}
-          </Txt>
-        </Ring>
-        <View style={{ flex: 1 }}>
-          <Txt v="c1" w="600" c={colors.orange} style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {`Up next${action.required ? ' · Required' : ''}`}
-          </Txt>
-          <Txt v="t3" c={colors.white} style={{ marginTop: 2 }}>
-            {action.title}
-          </Txt>
-          <Txt v="fn" c={colors.dark.l2} num style={{ marginTop: 2 }}>
-            {`${lookup(action.institutionId).mono} · ${phase ? `${phase.label.split(' ')[0]?.toLowerCase()} until` : 'due'} ${formatDate.weekdayShort(action.deadline)}`}
-          </Txt>
+    <View style={styles.upNext}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={`Up next. Action, ${action.required ? 'required' : 'advised'}, ${daysLeft} days left. ${action.title}`} onPress={() => router.push(toHref({ kind: 'action', id: action.id }))}>
+        <View style={styles.between}>
+          <View style={styles.upLabel}>
+            <Txt v="headline">Up next</Txt>
+            <Txt v="footnote" c={colors.ink2}>{action.required ? 'Required' : 'Advised'}</Txt>
+          </View>
+          <InstitutionLogo id={inst.id} label={inst.mono} size="s" />
         </View>
+        <Txt v="callout" w="medium" style={{ marginTop: 8 }}>
+          {action.title}
+        </Txt>
+        <View style={styles.count}>
+          <Txt v="title1" num c={colors.accent}>
+            {Math.max(0, daysLeft)}
+          </Txt>
+          <View style={{ paddingBottom: 3, flex: 1 }}>
+            <Txt v="subhead" w="medium">
+              {`${daysLeft === 1 ? 'day' : 'days'} left${phase ? ` at ${phase.label.toLowerCase().split(' and ')[0]}` : ''}`}
+            </Txt>
+            <Txt v="footnote" c={colors.ink2} num>{`Ends ${formatDate.weekdayShort(action.deadline)} ${formatDate.year(action.deadline)}`}</Txt>
+          </View>
+        </View>
+        <View style={{ marginTop: 12 }}>
+          <Bar value={1 - windowRemaining(action, today)} height={4} />
+        </View>
+        {(action.revision || tracked.copies.length > 1) && (
+          <View style={styles.upTags}>
+            {action.revision && <Tag label="Deadline moved" icon="refresh" />}
+            {tracked.copies.length > 1 && <Tag label={`${done.length} of ${tracked.copies.length} done`} icon="people" />}
+          </View>
+        )}
+      </PressableScale>
+      <View style={styles.upActions}>
+        <View style={{ flex: 1 }}>
+          <Button label={open.length > 1 ? 'Mark done…' : 'Mark done'} icon="check" size="md" variant="secondary" onPress={onDone} />
+        </View>
+        <Button label="Reminders" variant="quiet" icon="bell" size="md" hug onPress={() => router.push({ pathname: '/track/[id]', params: { id: action.id } })} />
       </View>
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
-        {action.revision && <CapButton label="Deadline moved" icon="refresh" variant="glass" />}
-        {tracked.copies.length > 1 && <CapButton label={`${done.length} of ${tracked.copies.length} done`} icon="people" variant="glass" />}
-      </View>
-    </PressableScale>
+    </View>
   );
 }
 
-export function DueSoon({ rows, today }: { rows: readonly TrackRow[]; today: string }) {
-  const lookup = useInstitutionLookup();
+/** The next few deadlines as the same rows as Tracking: tick to mark done, swipe to snooze, open for details. */
+export function DueSoon({ rows }: { rows: readonly TrackRow[]; today: string }) {
+  const { markDone, snooze } = useTrackRowActions();
   if (!rows.length) return null;
   return (
-    <>
-      <SectionTitle
-        title="Due soon"
-        accessory={
-          <Txt v="sh" c={colors.tint} onPress={() => router.navigate('/tracking')} accessibilityRole="link">
-            See all
+    <Animated.View layout={layout}>
+      <SectionHeader title="Due soon" compact accessory={<TextAction label="All" onPress={() => router.navigate('/tracking')} />} />
+      {rows.map((r, i) => (
+        <Fragment key={r.action.id}>
+          {i > 0 && <Rule style={{ marginLeft: GUTTER + 38 }} />}
+          <SwipeRow row={r} onDone={() => markDone(r)} onSnooze={() => snooze(r)} />
+        </Fragment>
+      ))}
+    </Animated.View>
+  );
+}
+
+/** Calendar-leaf date: month over day. Dates within a week take the brand tint. */
+export function DateTile({ ymd, far, size = 44, urgent }: { ymd: string; far?: boolean; size?: number; urgent?: boolean }) {
+  const colors = useColors();
+  const styles = useStyles();
+  return (
+    <View style={[styles.date, { width: size, height: size + 4 }, urgent && { backgroundColor: colors.accentWash, borderColor: colors.accentWash }]} accessibilityElementsHidden>
+      <Txt v="caption" c={urgent ? colors.accentInk : colors.ink2} style={{ fontSize: 11, lineHeight: 13 }}>
+        {far ? formatDate.year(ymd) : formatDate.monthShort(ymd)}
+      </Txt>
+      <Txt v="title3" num c={urgent ? colors.accentInk : colors.ink} style={{ fontSize: 19, lineHeight: 22 }}>
+        {far ? formatDate.monthShort(ymd) : formatDate.day(ymd)}
+      </Txt>
+    </View>
+  );
+}
+
+/** One fact per line: a small icon, what it is, and the single number or state that matters. */
+function GlanceRow({ art, label, value, note, noteColor, onPress, a11y }: { art: FeatureIconName; label: string; value: string; note?: string; noteColor?: string; onPress: () => void; a11y: string }) {
+  const colors = useColors();
+  const styles = useStyles();
+  return (
+    <Highlight accessibilityRole="button" accessibilityLabel={a11y} onPress={onPress} pressedStyle={{ backgroundColor: colors.pressed }} style={styles.line}>
+      <FeatureIcon name={art} size={28} />
+      <Txt v="subhead" c={colors.ink2} numberOfLines={1} style={{ flex: 1 }}>
+        {label}
+      </Txt>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Txt v="subhead" w="semibold" num numberOfLines={1}>
+          {value}
+        </Txt>
+        {note && (
+          <Txt v="caption" c={noteColor ?? colors.ink2} num numberOfLines={1}>
+            {note}
           </Txt>
-        }
-      />
-      <Group inset={INSET.avatar}>
-        {rows.map((r) => {
-          const people = r.tracked.copies.length > 1 ? `${r.done.length} of ${r.tracked.copies.length} people done` : `in ${daysBetween(today, r.action.deadline)} days`;
-          return (
-            <Cell key={r.action.id} left={<DateBadge month={formatDate.monthTag(r.action.deadline)} day={r.daysLeft > 180 ? `’${formatDate.year(r.action.deadline).slice(2)}` : formatDate.day(r.action.deadline)} />} title={r.action.title} subtitle={`${lookup(r.action.institutionId).mono} · ${people}`} chevron onPress={() => router.push(toHref({ kind: 'action', id: r.action.id }))} />
-          );
-        })}
-      </Group>
-    </>
-  );
-}
-
-function GlanceTile({ children, onPress, label }: { children: React.ReactNode; onPress?: () => void; label: string }) {
-  return (
-    <PressableScale feedback="tap" accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={!onPress} style={styles.tile}>
-      {children}
-    </PressableScale>
-  );
-}
-
-function TileSkeleton() {
-  return (
-    <View style={[styles.tile, { gap: 6 }]} accessibilityLabel="Loading">
-      <Skeleton width={30} height={30} radius={7} />
-      <View style={{ marginTop: 'auto', gap: 6 }}>
-        <Skeleton width={40} height={12} />
-        <Skeleton width={70} height={18} />
+        )}
       </View>
-    </View>
+    </Highlight>
   );
 }
 
-function TileError({ label, onRetry }: { label: string; onRetry: () => void }) {
-  return (
-    <View style={styles.tile}>
-      <Tile icon="exclamation" color="gray" />
-      <Txt v="fn" c={colors.l2} style={{ marginTop: 'auto' }}>{`${label} didn’t load`}</Txt>
-      <CapButton label="Retry" onPress={onRetry} />
-    </View>
-  );
-}
+const change = (colors: Palette, pct: number) => (pct === 0 ? { fg: colors.ink2, text: 'No change' } : pct > 0 ? { fg: colors.ok, text: `↑ ${pct.toFixed(2)}%` } : { fg: colors.bad, text: `↓ ${Math.abs(pct).toFixed(2)}%` });
 
-/** Three tiles, three requests: each loads, fails and retries on its own. */
-export function AtAGlance({ today, offline }: { today: string; offline: boolean }) {
+/** At a glance: rates, your route, the next event and fuel, as four quiet lines. Each loads and retries alone. */
+export function TodayStrip({ today, offline }: { today: string; offline: boolean }) {
+  const colors = useColors();
   const api = useApi();
   const rates = useQuery(q.rates(api));
   const roads = useQuery(q.roads(api));
   const calendar = useQuery(q.calendar(api));
-  const stamp = rates.data ? formatTime(rates.data.asOf) : '';
   const usd = rates.data?.fx[0];
   const onRoute = roads.data?.advisories.filter((a) => a.onRoute) ?? [];
-  const next = calendar.data?.filter((e) => e.date >= today && e.from).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const next = calendar.data?.filter((e) => e.date >= today && e.from && e.state !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date))[0];
+  const nextLabel = next ? (daysBetween(today, next.date) === 0 ? 'Today' : daysBetween(today, next.date) === 1 ? 'Tomorrow' : formatDate.weekdayShort(next.date)) : '';
+  const go = (href: Href) => () => router.push(href);
+  const failed = [rates, roads, calendar].filter((x) => x.isError && !x.data);
 
   return (
-    <>
-      <SectionTitle title="At a glance" accessory={stamp ? <Txt v="fn" c={colors.l2} num>{stamp}</Txt> : undefined} />
-      <View style={styles.tiles}>
-        {rates.isPending ? (
-          <TileSkeleton />
-        ) : !usd ? (
-          <TileError label="Rates" onRetry={() => rates.refetch()} />
-        ) : (
-          <GlanceTile label={`${usd.code} ${usd.value}`} onPress={() => router.push('/rates')}>
-            <Tile icon="chart" color="green" />
-            <Txt v="fn" c={colors.l2} style={{ marginTop: 'auto' }}>
-              {usd.code}
-            </Txt>
-            <Txt v="hl" num>
-              {usd.value.toLocaleString('en-GB', { minimumFractionDigits: 2 })}
-            </Txt>
-            <Txt v="c1" num c={usd.changePct >= 0 ? colors.greenText : colors.redText}>{`${usd.changePct >= 0 ? '▲' : '▼'} ${Math.abs(usd.changePct).toFixed(2)}%`}</Txt>
-          </GlanceTile>
-        )}
-        {roads.isPending ? (
-          <TileSkeleton />
-        ) : !roads.data ? (
-          <TileError label="Roads" onRetry={() => roads.refetch()} />
-        ) : (
-          <GlanceTile label="Your route" onPress={() => router.push('/traffic')}>
-            <Tile icon="car" color="orange" />
-            <Txt v="fn" c={colors.l2} style={{ marginTop: 'auto' }}>
-              Your route
-            </Txt>
-            <Txt v="hl">{onRoute.length ? `${onRoute.length} closure${onRoute.length > 1 ? 's' : ''}` : 'Clear'}</Txt>
-            <Txt v="c1" c={offline ? colors.l2 : colors.orangeText} num>
-              {offline ? `As of ${formatTime(roads.data.asOf)}` : onRoute[0] ? (daysBetween(today, onRoute[0].window.from.slice(0, 10)) === 1 ? 'Tomorrow' : formatDate.weekdayShort(onRoute[0].window.from.slice(0, 10))) : 'No advisories'}
-            </Txt>
-          </GlanceTile>
-        )}
-        {calendar.isPending ? (
-          <TileSkeleton />
-        ) : !calendar.data ? (
-          <TileError label="Calendar" onRetry={() => calendar.refetch()} />
-        ) : (
-          <GlanceTile label="Next event" onPress={() => router.push('/calendar')}>
-            <Tile icon="calendar" color="purple" />
-            <Txt v="fn" c={colors.l2} style={{ marginTop: 'auto' }}>
-              {next ? formatDate.weekday(next.date) : 'Calendar'}
-            </Txt>
-            <Txt v="hl" numberOfLines={1}>
-              {next?.title ?? 'Nothing soon'}
-            </Txt>
-            <Txt v="c1" c={colors.l2} num>
-              {next?.from ?? ''}
-            </Txt>
-          </GlanceTile>
-        )}
-      </View>
-    </>
+    <View>
+      <SectionHeader title="At a glance" compact accessory={offline ? <Txt v="caption" c={colors.ink2}>Saved copy</Txt> : undefined} />
+      {usd && (
+        <GlanceRow art="rates" label="US dollar" value={usd.value.toLocaleString('en-GB', { minimumFractionDigits: 2 })} note={change(colors, usd.changePct).text} noteColor={change(colors, usd.changePct).fg} onPress={go('/rates')} a11y={`US dollar ${usd.value} francs, ${change(colors, usd.changePct).text}`} />
+      )}
+      {roads.data && (
+        <GlanceRow
+          art="roads"
+          label="Your route"
+          value={onRoute.length ? `${onRoute[0]?.road ?? ''} closed` : 'Clear'}
+          note={onRoute[0] ? `${daysBetween(today, onRoute[0].window.from.slice(0, 10)) === 1 ? 'Tomorrow' : formatDate.weekdayShort(onRoute[0].window.from.slice(0, 10))} ${formatTime(onRoute[0].window.from)}` : undefined}
+          noteColor={onRoute.length ? colors.bad : undefined}
+          onPress={go('/traffic')}
+          a11y={`Your route. ${onRoute.length ? `${onRoute[0]?.road ?? ''} closed` : 'Clear'}`}
+        />
+      )}
+      {next && <GlanceRow art="calendar" label={next.title} value={nextLabel} note={next.from ?? undefined} onPress={go('/calendar')} a11y={`Next: ${next.title}, ${nextLabel}`} />}
+      {rates.data && (
+        <GlanceRow art="fuel" label="Petrol, per litre" value={`Rwf ${(rates.data.fuel.items[0]?.price ?? 0).toLocaleString('en-GB')}`} onPress={go('/rates')} a11y={`Petrol ${rates.data.fuel.items[0]?.price ?? ''} francs a litre`} />
+      )}
+      {(rates.isPending || roads.isPending || calendar.isPending) && <Skeleton width="60%" height={14} style={{ marginHorizontal: GUTTER, marginVertical: 12 }} />}
+      {failed.length > 0 && <RetryLine label="Some figures" error={failed[0]?.error} onRetry={() => failed.forEach((x) => x.refetch())} style={{ marginTop: 6 }} />}
+      <View style={{ height: 8 }} />
+    </View>
   );
 }
 
 export function ModuleRetry({ label, error, onRetry }: { label: string; error: unknown; onRetry: () => void }) {
   return (
-    <Animated.View layout={LinearTransition}>
+    <Animated.View layout={layout} style={{ marginTop: 16 }}>
       <RetryLine label={label} error={error} onRetry={onRetry} />
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
-  banner: { marginHorizontal: 16, marginTop: 8, padding: 12, paddingLeft: 14, borderRadius: 16, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  upNext: { marginHorizontal: 16, marginTop: 12, backgroundColor: colors.black, borderRadius: 22, padding: 18 },
-  row16: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  tiles: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
-  tile: { flex: 1, height: 128, borderRadius: 18, padding: 12, backgroundColor: colors.card },
-});
+const useStyles = createStyles((colors) =>
+  StyleSheet.create({
+    bannerWrap: {},
+    banner: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 14, paddingLeft: GUTTER, paddingRight: GUTTER - 8 },
+    bannerBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    bannerIcon: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.badWash, alignItems: 'center', justifyContent: 'center' },
+    row4: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    line: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingHorizontal: GUTTER, paddingVertical: 8 },
+    upNext: { paddingHorizontal: GUTTER, paddingTop: 14, paddingBottom: 16 },
+    upLabel: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    count: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 10 },
+    upTags: { flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap' },
+    upActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+    date: { borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  }),
+);

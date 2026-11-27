@@ -4,7 +4,7 @@ import type { Prefs } from './schema';
  * Demo starting state so the tracking, people and done views have content on first launch,
  * matching the design. A real install starts with `tracked: {}`.
  */
-export const DEMO_TRACKING: Pick<Prefs, 'tracked' | 'archive' | 'people'> = {
+export const DEMO_TRACKING: Pick<Prefs, 'tracked' | 'archive' | 'people' | 'reports'> = {
   people: ['Me', 'Shop cash box', 'Child 1', 'Mum'],
   tracked: {
     banknotes: {
@@ -35,6 +35,7 @@ export const DEMO_TRACKING: Pick<Prefs, 'tracked' | 'archive' | 'people'> = {
     },
     'hec-scholarship': { actionId: 'hec-scholarship', copies: [{ id: 'child1', label: 'Child 1', doneAt: null }], plan: 'light', addToCalendar: false, notificationIds: [], createdAt: '2026-10-16T08:00:00+02:00', snoozedUntil: null },
   },
+  reports: [{ receipt: 'R-40718', subject: 'vat', field: 'Deadline', reason: 'Wrong date, amount or place', at: '2026-11-21T09:14:00+02:00', status: 'resolved' }],
   archive: [
     { title: 'VAT return · October', doneAt: '2026-11-13T09:00:00+02:00' },
     { title: 'Renew driving licence', doneAt: '2026-10-02T09:00:00+02:00' },

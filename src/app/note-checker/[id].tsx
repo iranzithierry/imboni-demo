@@ -1,117 +1,142 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { useAction } from '@/features/data';
 import { formatDate } from '@/lib/dates';
 import { haptic } from '@/lib/haptics';
-import { Gradient, Pill } from '@/ui/atoms';
-import { Button } from '@/ui/button';
+import { Radio, IconTile } from '@/ui/atoms';
+import { Button, Chip } from '@/ui/button';
 import { Icon } from '@/ui/icon';
-import { Cell, Group, GroupHeader } from '@/ui/list';
-import { BackButton, NavBar, Screen, useNavInset, useScrollY } from '@/ui/nav';
+import { Group, GroupLabel, Row } from '@/ui/list';
+import { useHeroTitle, useScrollY } from '@/ui/nav';
+import { ErrorScreen } from '@/ui/states';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, GUTTER, motion, radius, useColors } from '@/ui/theme';
 
 export default function NoteChecker() {
+  const colors = useColors();
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { action } = useAction(id);
+  const { action, error, refetch, isPending } = useAction(id);
   const { scrollY, onScroll } = useScrollY();
-  const top = useNavInset();
   const table = action?.checker;
   const [value, setValue] = useState(table?.denominations.at(-1)?.value ?? '');
-  const [date, setDate] = useState<string | null>(table?.denominations.at(-1)?.dates[0]?.label ?? null);
-  if (!action || !table) return null;
+  const [date, setDate] = useState<string | null>(null);
+  useHeroTitle(scrollY, 40, 'Check a banknote');
+  if (!action || !table) return isPending ? null : <ErrorScreen error={error ?? new Error('not_found')} onRetry={() => refetch()} />;
   const denom = table.denominations.find((d) => d.value === value) ?? table.denominations[0];
   const hit = denom?.dates.find((d) => d.label === date);
   const [now, next] = action.phases;
-  const withdrawnNote = now && next ? `Exchange at ${now.label.toLowerCase()} by ${formatDate.short(now.to)}, then ${next.label} until ${formatDate.long(next.to)}.` : `Exchange it by ${formatDate.long(action.deadline)}.`;
+  const withdrawnNote = now && next ? `Exchange it at ${now.label.toLowerCase()} by ${formatDate.long(now.to)}, then only at BNR until ${formatDate.long(next.to)}. It’s free.` : `Exchange it by ${formatDate.long(action.deadline)}.`;
 
   return (
-    <Screen>
-      <NavBar scrollY={scrollY} title="Check a banknote" left={<BackButton label="Action" />} />
-      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingTop: top, paddingBottom: 40 }}>
-        <View style={{ paddingHorizontal: 20 }}>
-          <Txt v="t1" accessibilityRole="header">
-            Check a banknote
-          </Txt>
-          <Txt v="co" c={colors.l2} style={{ marginTop: 4 }}>
-            Pick the value, then the date printed on the note.
-          </Txt>
-        </View>
-        <View style={styles.note} accessibilityLabel={`${denom?.value} Rwandan francs, issued ${date ?? 'date not chosen'}`}>
-          <Animated.View key={denom?.gradient} entering={FadeIn.duration(350)} style={StyleSheet.absoluteFill}>
-            <Gradient name={denom?.gradient ?? 'banknote'} />
-          </Animated.View>
-          <Txt v="fn" w="600" c="rgba(255,255,255,0.85)">
-            Banki Nkuru y’u Rwanda
-          </Txt>
-          <Txt num c={colors.white} style={{ fontSize: 44, lineHeight: 50, fontWeight: '700', marginTop: 18 }}>
+    <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: 48 }}>
+      <View style={styles.head}>
+        <Txt v="title1" accessibilityRole="header">
+          Check a banknote
+        </Txt>
+        <Txt v="callout" c={colors.ink2} style={{ marginTop: 6 }}>
+          BNR withdrew specific issue dates, not whole values. Pick the value, then the date printed on your note.
+        </Txt>
+      </View>
+
+      <View style={styles.note} accessibilityLabel={`${denom?.value} Rwandan francs${date ? `, issued ${date}` : ''}`}>
+        <View style={styles.noteFrame}>
+          <View style={styles.noteTop}>
+            <Txt v="caption" c={colors.ink2}>
+              Banki Nkuru y’u Rwanda
+            </Txt>
+            <View style={styles.seal}>
+              <Icon name="bank" size={16} color={colors.violet} />
+            </View>
+          </View>
+          <Txt v="display" num style={{ marginTop: 8 }}>
             {denom?.value}
           </Txt>
-          <Txt v="fn" c="rgba(255,255,255,0.85)">
+          <Txt v="footnote" c={colors.ink2}>
             Rwandan francs
           </Txt>
           <View style={styles.dateChip}>
-            <Icon name="calendar" size={11} color={colors.l1} />
-            <Txt v="fn" num>
+            <Icon name="calendar" size={12} color={colors.ink} />
+            <Txt v="footnote" w="semibold" num>
               {date ?? 'Issue date'}
             </Txt>
           </View>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pills}>
-          {table.denominations.map((d) => (
-            <Pill key={d.value} label={`Rwf ${d.value}`} on={d.value === value} onPress={() => { setValue(d.value); setDate(null); }} />
-          ))}
-        </ScrollView>
-        <GroupHeader>Issue date</GroupHeader>
-        <Group>
-          {denom?.dates.map((d) => (
-            <Cell
-              key={d.label}
-              title={d.label}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: date === d.label }}
-              onPress={() => {
-                setDate(d.label);
-                if (d.withdrawn) haptic.warning();
-                else haptic.success();
-              }}
-              right={<Icon name="check" size={17} color={colors.tint} style={{ opacity: date === d.label ? 1 : 0 }} />}
-            />
-          ))}
-        </Group>
-        {hit && (
-          <Animated.View key={`${value}-${hit.label}`} entering={ZoomIn.springify().damping(14)} style={styles.result} accessibilityLiveRegion="polite">
-            <View style={[styles.resultIcon, { backgroundColor: hit.withdrawn ? colors.red : colors.green }]}>
-              <Icon name={hit.withdrawn ? 'xmark' : 'check'} size={28} color={colors.white} />
-            </View>
-            <Txt v="t2" center style={{ marginTop: 12 }}>
+      </View>
+
+      <GroupLabel>Value</GroupLabel>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {table.denominations.map((d) => (
+          <Chip
+            key={d.value}
+            label={`Rwf ${d.value}`}
+            selected={d.value === value}
+            onPress={() => {
+              setValue(d.value);
+              setDate(null);
+            }}
+          />
+        ))}
+      </ScrollView>
+
+      <GroupLabel>Issue date printed on the note</GroupLabel>
+      <Group>
+        {denom?.dates.map((d) => (
+          <Row
+            key={d.label}
+            title={d.label}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: date === d.label }}
+            onPress={() => {
+              setDate(d.label);
+              if (d.withdrawn) haptic.warning();
+              else haptic.success();
+            }}
+            right={<Radio on={date === d.label} />}
+          />
+        ))}
+      </Group>
+
+      {hit && (
+        <Animated.View key={`${value}-${hit.label}`} entering={FadeIn.duration(motion.base)} layout={LinearTransition.duration(motion.base)} style={[styles.result, { backgroundColor: hit.withdrawn ? colors.badWash : colors.okWash }]} accessibilityLiveRegion="polite">
+          <View style={styles.resultHead}>
+            <IconTile icon={hit.withdrawn ? 'xmark' : 'check'} tone={hit.withdrawn ? 'bad' : 'ok'} size={40} style={{ backgroundColor: colors.card }} />
+            <Txt v="title2" c={hit.withdrawn ? colors.bad : colors.ok}>
               {hit.withdrawn ? 'Withdrawn' : 'Still valid'}
             </Txt>
-            <Txt v="co" c={colors.l2} center style={{ marginTop: 4 }}>
-              {hit.withdrawn ? withdrawnNote : 'Keep using it. Nothing to do.'}
-            </Txt>
-            {hit.withdrawn && <Button label="Track the exchange" variant="tinted" style={{ marginTop: 16 }} onPress={() => router.push({ pathname: '/track/[id]', params: { id: action.id } })} />}
-          </Animated.View>
-        )}
-        <View style={styles.source}>
-          <Icon name="shield" size={13} color={colors.green} />
-          <Txt v="fn" c={colors.l2}>
-            {table.source}
+          </View>
+          <Txt v="callout" style={{ marginTop: 10 }}>
+            {hit.withdrawn ? withdrawnNote : 'Keep using it. Nothing to do for this note.'}
           </Txt>
-        </View>
-      </Animated.ScrollView>
-    </Screen>
+          {hit.withdrawn && (
+            <View style={{ marginTop: 16 }}>
+              <Button label="Track the exchange" icon="plus" size="md" onPress={() => router.push({ pathname: '/track/[id]', params: { id: action.id } })} />
+            </View>
+          )}
+        </Animated.View>
+      )}
+      <View style={styles.source}>
+        <Icon name="shield" size={14} color={colors.ok} />
+        <Txt v="footnote" c={colors.ink2} style={{ flex: 1 }}>
+          {table.source}
+        </Txt>
+      </View>
+    </Animated.ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  note: { marginTop: 18, marginHorizontal: 16, height: 190, borderRadius: 18, overflow: 'hidden', padding: 18, boxShadow: '0 10px 30px rgba(0,0,0,0.15)' },
-  dateChip: { position: 'absolute', left: 18, bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 10, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.95)' },
-  pills: { gap: 8, paddingHorizontal: 16, paddingTop: 16 },
-  result: { marginTop: 22, marginHorizontal: 16, padding: 20, borderRadius: 16, backgroundColor: colors.card, alignItems: 'center' },
-  source: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 32, paddingTop: 10 },
-  resultIcon: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-});
+const useStyles = createStyles((colors) => StyleSheet.create({
+  head: { paddingHorizontal: GUTTER, paddingTop: 12 },
+  note: { marginHorizontal: GUTTER, marginTop: 20, padding: 8, borderRadius: radius.xl, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  noteFrame: { padding: 16, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.violet, borderStyle: 'dashed', backgroundColor: colors.violetWash, minHeight: 176 },
+  noteTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  seal: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  dateChip: { position: 'absolute', right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: 10, borderRadius: radius.sm, backgroundColor: colors.card },
+  chips: { gap: 8, paddingHorizontal: GUTTER },
+  result: { marginHorizontal: GUTTER, marginTop: 16, padding: 18, borderRadius: radius.xl, borderCurve: 'continuous' },
+  resultHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  source: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: GUTTER + 4, paddingTop: 14 },
+}));

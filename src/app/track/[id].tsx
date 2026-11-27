@@ -1,33 +1,36 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeInUp, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { useAction, useNow, usePlaceTimeZone, useToday } from '@/features/data';
 import { useTracker, type TrackOutcome } from '@/features/tracking';
-import { formatDate, formatTime } from '@/lib/dates';
+import { daysBetween, formatDate, formatTime } from '@/lib/dates';
 import { userMessage } from '@/lib/errors';
 import { haptic } from '@/lib/haptics';
 import { PLAN_COPY, reminderSchedule, reminderTicks, type ReminderPlan } from '@/lib/reminders';
 import { usePrefs } from '@/state/prefs';
-import { Card, Initials, Switch, Tile } from '@/ui/atoms';
+import { Checkbox, IconTile, Switch } from '@/ui/atoms';
 import { Button } from '@/ui/button';
 import { Icon } from '@/ui/icon';
-import { Cell, Group, GroupFooter, GroupHeader, INSET } from '@/ui/list';
-import { NavButton } from '@/ui/nav';
+import { Group, GroupLabel, GroupNote, INSET, Row } from '@/ui/list';
+import { closeAction, Dock, HeaderActions, useDockInset } from '@/ui/nav';
 import { Segmented } from '@/ui/segmented';
 import { Txt } from '@/ui/text';
-import { colors, type Swatch } from '@/ui/theme';
+import { createStyles, fonts, GUTTER, motion, radius, useColors } from '@/ui/theme';
 
 const PLANS = (Object.keys(PLAN_COPY) as ReminderPlan[]).map((value) => ({ value, label: PLAN_COPY[value].label }));
-const PALETTE: Swatch[] = ['tint', 'orange', 'pink', 'teal', 'purple'];
 
 export default function TrackSheet() {
+  const colors = useColors();
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { action } = useAction(id);
   const today = useToday();
   const now = useNow();
   const tz = usePlaceTimeZone();
+  const bottom = useDockInset();
+  const doneBottom = useDockInset(2);
   const people = usePrefs((s) => s.people);
   const addPerson = usePrefs((s) => s.addPerson);
   const existing = usePrefs((s) => s.tracked[id]);
@@ -39,7 +42,14 @@ export default function TrackSheet() {
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<TrackOutcome | null>(null);
 
-  if (!action) return null;
+  const header = (
+    <>
+      <Stack.Screen options={{ title: outcome ? '' : existing ? 'Edit tracking' : 'Track' }} />
+      <HeaderActions actions={[closeAction]} />
+    </>
+  );
+
+  if (!action) return header;
   const reminders = reminderSchedule(plan, action.deadline, today, now, tz);
   const ticks = reminderTicks(reminders, today, action.deadline, plan);
   const n = chosen.size;
@@ -70,114 +80,130 @@ export default function TrackSheet() {
     setOutcome(result);
   };
 
+  if (outcome) {
+    const remindersNote = outcome.reminders === 'scheduled' ? (first ? `First reminder ${formatDate.weekdayShort(first.ymd)} at ${formatTime(first.at, tz)}.` : '') : outcome.reminders === 'none' ? 'No reminders are left before the deadline.' : `Reminders are off. ${userMessage(outcome.reminders)}`;
+    const calendarNote = outcome.calendar === 'added' ? ' Added to your calendar.' : outcome.calendar === 'skipped' ? '' : ` Calendar: ${userMessage(outcome.calendar)}`;
+    return (
+      <View style={styles.sheet}>
+        {header}
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: doneBottom }}>
+          <Animated.View entering={FadeIn.duration(motion.base)} style={styles.done}>
+            <IconTile icon="check" tone="ok" size={56} />
+            <Txt v="title2" style={{ marginTop: 18 }}>{`Tracking for ${n === 1 ? '1 person' : `${n} people`}`}</Txt>
+            <Txt v="callout" c={colors.ink2} style={{ marginTop: 8 }}>{`${remindersNote}${calendarNote} Each copy is marked done on its own, and you’ll hear if anything changes.`}</Txt>
+          </Animated.View>
+        </ScrollView>
+        <Dock>
+          <Button label="Open Tracking" onPress={() => router.dismissTo('/tracking')} />
+          <Button
+            label="Undo"
+            variant="secondary"
+            icon="undo"
+            onPress={async () => {
+              await tracker.stop(action.id);
+              setOutcome(null);
+            }}
+          />
+        </Dock>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.sheet}>
-      <View style={styles.header}>
-        <NavButton label="Cancel" onPress={() => router.back()} />
-        <Txt v="hl" accessibilityRole="header">
-          Track
-        </Txt>
-        {outcome ? <View style={{ width: 60 }} /> : <NavButton label={existing ? 'Save' : 'Add'} bold disabled={!n || saving} onPress={confirm} />}
-      </View>
-      {outcome ? (
-        <Done n={n} first={first ? `${formatDate.weekdayShort(first.ymd)}, ${formatTime(first.at, tz)}` : null} outcome={outcome} onUndo={async () => {
-          await tracker.stop(action.id);
-          setOutcome(null);
-        }} />
-      ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
-          <GroupHeader top={8}>Who is this for</GroupHeader>
-          <Animated.View layout={LinearTransition}>
-            <Group inset={INSET.tile}>
-              {people.map((p, i) => (
-                <Cell
-                  key={p}
-                  left={<Initials label={p[0] ?? '?'} color={PALETTE[i % PALETTE.length] ?? 'tint'} size="s" />}
-                  title={p}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: chosen.has(p) }}
-                  onPress={() => toggle(p)}
-                  right={chosen.has(p) ? <Animated.View entering={ZoomIn.springify()}><Icon name="check" size={17} color={colors.tint} /></Animated.View> : undefined}
-                />
-              ))}
-              <View style={styles.addRow}>
-                <View style={styles.plus}>
-                  <Icon name="plus" size={12} color={colors.white} />
-                </View>
-                <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={commitDraft} placeholder="Add person" placeholderTextColor={colors.tint} returnKeyType="done" maxLength={40} style={styles.input} accessibilityLabel="Add person by label" />
-              </View>
-            </Group>
-          </Animated.View>
-          <GroupFooter>Each person gets their own checklist. Use a label, not a full name.</GroupFooter>
-
-          <GroupHeader>Reminders</GroupHeader>
-          <Card style={{ padding: 14 }}>
-            <Segmented accessibilityLabel="Reminder plan" options={PLANS} value={plan} onChange={setPlan} />
-            <View style={styles.track} accessibilityLabel={`${reminders.length} reminders before ${formatDate.long(action.deadline)}`}>
-              <View style={styles.line} />
-              <View style={styles.today} />
-              <Txt v="c1" c={colors.l2} style={styles.todayLabel}>
-                Today
-              </Txt>
-              {ticks.map((t, i) => (
-                <Animated.View key={`${plan}-${t.key}`} entering={FadeInUp.delay(i * 50).springify()} style={[styles.tick, { left: `${t.x * 100}%` }]}>
-                  <View style={styles.bell}>
-                    <Icon name="bell" size={13} color={colors.white} />
-                  </View>
-                  <Txt v="c1" w="600" num>
-                    {t.label}
-                  </Txt>
-                </Animated.View>
-              ))}
-            </View>
-            <Txt v="fn" c={colors.l2} style={{ marginTop: 6 }}>
-              {reminders.length ? PLAN_COPY[plan].note : 'No reminders left before the deadline.'}
+      {header}
+      <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottom }}>
+        <View style={styles.summary}>
+          <IconTile icon="checklist" tone="brand" size={44} />
+          <View style={{ flex: 1 }}>
+            <Txt v="callout" w="semibold">
+              {action.title}
             </Txt>
-          </Card>
+            <Txt v="footnote" c={colors.ink2} num>{`Due ${formatDate.long(action.deadline)} · ${daysBetween(today, action.deadline)} days`}</Txt>
+          </View>
+        </View>
 
-          <Group style={{ marginTop: 22 }} inset={INSET.tile}>
-            <Cell left={<Tile icon="calendar" color="red" />} title="Add to Calendar" right={<Switch label="Add to Calendar" value={calendar} onChange={setCalendar} />} />
-            <Cell left={<Tile icon="refresh" color="orange" />} title="Alert if it changes" detail="Always" />
+        <GroupLabel>Who is this for</GroupLabel>
+        <Animated.View layout={LinearTransition.duration(motion.base)}>
+          <Group inset={INSET.check}>
+            {people.map((p) => (
+              <Row key={p} left={<Checkbox on={chosen.has(p)} />} title={p} accessibilityRole="checkbox" accessibilityState={{ checked: chosen.has(p) }} onPress={() => toggle(p)} />
+            ))}
+            <View style={styles.addRow}>
+              <View style={styles.plus}>
+                <Icon name="plus" size={13} color={colors.ink} weight="semibold" />
+              </View>
+              <TextInput
+                value={draft}
+                onChangeText={setDraft}
+                onSubmitEditing={commitDraft}
+                placeholder="Add someone, e.g. Child 2"
+                placeholderTextColor={colors.ink3}
+                returnKeyType="done"
+                maxLength={40}
+                style={styles.input}
+                accessibilityLabel="Add a person by label"
+              />
+            </View>
           </Group>
-        </ScrollView>
-      )}
+        </Animated.View>
+        <GroupNote>Each person gets their own checklist. Use a label like “Child 1”, never a full name.</GroupNote>
+
+        <GroupLabel>Reminders</GroupLabel>
+        <View style={styles.plan}>
+          <Segmented accessibilityLabel="Reminder plan" options={PLANS} value={plan} onChange={setPlan} />
+          <View style={styles.track} accessibilityLabel={`${reminders.length} reminders before ${formatDate.long(action.deadline)}`}>
+            <View style={styles.line} />
+            <View style={[styles.end, { left: 0 }]} />
+            <View style={[styles.end, styles.endDue]} />
+            <Txt v="caption" c={colors.ink2} style={styles.todayLabel}>
+              Today
+            </Txt>
+            <Txt v="caption" c={colors.ink2} style={styles.dueLabel} num>
+              {formatDate.short(action.deadline)}
+            </Txt>
+            {ticks.map((t) => (
+              <Animated.View key={`${plan}-${t.key}`} entering={FadeIn.duration(motion.fast)} style={[styles.tick, { left: `${t.x * 100}%` }]}>
+                <View style={styles.bell}>
+                  <Icon name="bell" size={12} color={colors.white} weight="semibold" />
+                </View>
+                <Txt v="caption" num>
+                  {t.label}
+                </Txt>
+              </Animated.View>
+            ))}
+          </View>
+          <Txt v="footnote" c={colors.ink2}>
+            {reminders.length ? PLAN_COPY[plan].note : 'No reminders are left before the deadline.'}
+          </Txt>
+        </View>
+
+        <Group style={{ marginTop: 16 }} inset={INSET.tile}>
+          <Row left={<IconTile icon="calendarAdd" tone="teal" />} title="Add the deadline to my calendar" right={<Switch label="Add to calendar" value={calendar} onChange={setCalendar} />} />
+          <Row left={<IconTile icon="refresh" tone="sky" />} title="Tell me if it changes" subtitle="Always on for tracked actions" />
+        </Group>
+      </ScrollView>
+      <Dock>
+        <Button label={n === 0 ? 'Choose who it’s for' : existing ? 'Save changes' : `Track for ${n === 1 ? '1 person' : `${n} people`}`} disabled={n === 0} loading={saving} onPress={confirm} />
+      </Dock>
     </View>
   );
 }
 
-function Done({ n, first, outcome, onUndo }: { n: number; first: string | null; outcome: TrackOutcome; onUndo: () => void }) {
-  const remindersNote =
-    outcome.reminders === 'scheduled' ? (first ? `First reminder ${first}.` : '') : outcome.reminders === 'none' ? 'No reminders left before the deadline.' : `Reminders are off. ${userMessage(outcome.reminders)}`;
-  const calendarNote = outcome.calendar === 'added' ? ' Added to your calendar.' : outcome.calendar === 'skipped' ? '' : ` Calendar: ${userMessage(outcome.calendar)}`;
-  return (
-    <Animated.View entering={FadeIn} style={styles.done}>
-      <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.doneIcon}>
-        <Icon name="bell" size={40} color={colors.white} />
-      </Animated.View>
-      <Txt v="t2" center style={{ marginTop: 20 }}>{`Tracking for ${n === 1 ? '1 person' : `${n} people`}`}</Txt>
-      <Txt v="co" c={colors.l2} center style={{ marginTop: 6 }}>
-        {`${remindersNote}${calendarNote} Each copy is marked done on its own.`}
-      </Txt>
-      <View style={{ alignSelf: 'stretch', marginTop: 30, gap: 8 }}>
-        <Button label="Open Tracking" onPress={() => router.dismissTo('/tracking')} />
-        <Button label="Undo" variant="plain" onPress={onUndo} />
-      </View>
-    </Animated.View>
-  );
-}
-
-const styles = StyleSheet.create({
-  sheet: { flex: 1, backgroundColor: colors.bg },
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingTop: 6 },
-  addRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, minHeight: 44 },
-  plus: { width: 22, height: 22, borderRadius: 11, marginHorizontal: 4, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-  input: { flex: 1, fontSize: 17, color: colors.l1, height: 44 },
-  track: { height: 70, marginTop: 22, marginHorizontal: 10 },
-  line: { position: 'absolute', left: 0, right: 0, top: 15, height: 4, borderRadius: 2, backgroundColor: colors.track },
-  today: { position: 'absolute', left: -6, top: 11, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.l1 },
-  todayLabel: { position: 'absolute', left: -8, top: 34 },
+const useStyles = createStyles((colors) => StyleSheet.create({
+  sheet: { flex: 1, backgroundColor: colors.canvas },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: GUTTER, marginTop: 4, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, minHeight: 52 },
+  plus: { width: 24, height: 24, borderRadius: radius.sm, borderWidth: 1.5, borderColor: colors.pearl, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, fontSize: 15, fontFamily: fonts.regular, color: colors.ink, height: 48 },
+  plan: { marginHorizontal: GUTTER, padding: 16, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  track: { height: 80, marginTop: 22, marginHorizontal: 14, marginBottom: 8 },
+  line: { position: 'absolute', left: 0, right: 0, top: 14, height: 4, borderRadius: radius.xs, backgroundColor: colors.fill },
+  end: { position: 'absolute', top: 10, width: 12, height: 12, marginLeft: -6, borderRadius: 6, backgroundColor: colors.accent },
+  endDue: { left: '100%', backgroundColor: colors.card, borderWidth: 2, borderColor: colors.accent },
+  todayLabel: { position: 'absolute', left: -12, top: 58 },
+  dueLabel: { position: 'absolute', right: -14, top: 58 },
   tick: { position: 'absolute', top: 0, alignItems: 'center', gap: 6, transform: [{ translateX: -16 }] },
-  bell: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.orange, borderWidth: 3, borderColor: colors.white, alignItems: 'center', justifyContent: 'center' },
-  done: { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 28 },
-  doneIcon: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' },
-});
+  bell: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.accent, borderWidth: 3, borderColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  done: { paddingHorizontal: GUTTER + 4, paddingTop: 40 },
+}));

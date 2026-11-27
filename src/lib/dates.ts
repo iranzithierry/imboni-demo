@@ -90,8 +90,8 @@ export const formatDate = {
   weekdayLong: (ymd: string) => fmt(ymd, { weekday: 'long', day: 'numeric', month: 'long' }),
   /** Saturday */
   weekday: (ymd: string) => fmt(ymd, { weekday: 'long' }),
-  /** DEC */
-  monthTag: (ymd: string) => fmt(ymd, { month: 'short' }).toUpperCase(),
+  /** Dec */
+  monthShort: (ymd: string) => fmt(ymd, { month: 'short' }),
   /** November */
   month: (ymd: string) => fmt(ymd, { month: 'long' }),
   day: (ymd: string) => fmt(ymd, { day: 'numeric' }),

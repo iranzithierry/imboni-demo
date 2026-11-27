@@ -1,0 +1,182 @@
+[
+  {
+    "id": "bnr",
+    "file": "bnr.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/3/32/Bnr_logo.jpg",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Bnr_logo.jpg",
+    "rights": "CC BY-SA 4.0",
+    "darkBackground": false
+  },
+  {
+    "id": "rra",
+    "file": "rra.png",
+    "source": "website",
+    "sourceUrl": "https://www.rra.gov.rw/typo3conf/ext/rra_ui/Resources/Public/images/Rwanda-Revenue-Authority-logo.png",
+    "pageUrl": "https://www.rra.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "nida",
+    "file": "nida.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/1/17/Coat_of_arms_of_Rwanda.svg",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Rwanda.svg",
+    "rights": "Public domain",
+    "darkBackground": false
+  },
+  {
+    "id": "mfa",
+    "file": "mfa.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/1/17/Coat_of_arms_of_Rwanda.svg",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Rwanda.svg",
+    "rights": "Public domain",
+    "darkBackground": false
+  },
+  {
+    "id": "cok",
+    "file": "cok.png",
+    "source": "website",
+    "sourceUrl": "https://www.kigalicity.gov.rw/fileadmin/user_upload/Kigali_city/Icon_images/LOGO_COK.jpg",
+    "pageUrl": "https://www.kigalicity.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "rura",
+    "file": "rura.png",
+    "source": "website",
+    "sourceUrl": "https://www.rura.rw/fileadmin/user_upload/RURA/Icon_Images/logorura.png",
+    "pageUrl": "https://www.rura.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": true
+  },
+  {
+    "id": "rnp",
+    "file": "rnp.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/5/54/Rwanda_National_Police.png",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Rwanda_National_Police.png",
+    "rights": "Public domain",
+    "darkBackground": false
+  },
+  {
+    "id": "rtda",
+    "file": "rtda.png",
+    "source": "website",
+    "sourceUrl": "https://www.rtda.gov.rw/fileadmin/user_upload/RTDA/Background_Images/Logos/rtda_logo.jpg",
+    "pageUrl": "https://www.rtda.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "meteo",
+    "file": "meteo.png",
+    "source": "website",
+    "sourceUrl": "https://www.meteorwanda.gov.rw/fileadmin/user_upload/Meteorwanda/Icons_logos/meteo_logos.png",
+    "pageUrl": "https://www.meteorwanda.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "nesa",
+    "file": "nesa.png",
+    "source": "website",
+    "sourceUrl": "https://www.nesa.gov.rw/fileadmin/user_upload/NESA/Background_Images/nesalogo.png",
+    "pageUrl": "https://www.nesa.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "mineduc",
+    "file": "mineduc.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/1/17/Coat_of_arms_of_Rwanda.svg",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Rwanda.svg",
+    "rights": "Public domain",
+    "darkBackground": false
+  },
+  {
+    "id": "hec",
+    "file": "hec.png",
+    "source": "website",
+    "sourceUrl": "https://www.hec.gov.rw/fileadmin/user_upload/HEC/Icon_logos/Logo_HEC.png",
+    "pageUrl": "https://www.hec.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": true
+  },
+  {
+    "id": "rbc",
+    "file": "rbc.png",
+    "source": "website",
+    "sourceUrl": "https://rbc.gov.rw/fileadmin/user_upload/logo/RBC-logo-White.png",
+    "pageUrl": "https://www.rbc.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "rssb",
+    "file": "rssb.png",
+    "source": "website",
+    "sourceUrl": "https://cdn.prod.website-files.com/692d980e022282d3de52dcdf/6a97618cd6824e829a98b6e7_rssb%20logo.png",
+    "pageUrl": "https://www.rssb.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "rdb",
+    "file": "rdb.png",
+    "source": "website",
+    "sourceUrl": "https://rdb.rw/wp-content/uploads/2018/03/cropped-favicon.png",
+    "pageUrl": "https://rdb.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "minicom",
+    "file": "minicom.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/1/17/Coat_of_arms_of_Rwanda.svg",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Rwanda.svg",
+    "rights": "Public domain",
+    "darkBackground": false
+  },
+  {
+    "id": "rsb",
+    "file": "rsb.png",
+    "source": "website",
+    "sourceUrl": "https://www.rsb.gov.rw/fileadmin/user_upload/Icons_logo/Logo-01.png",
+    "pageUrl": "https://www.rsb.gov.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": true
+  },
+  {
+    "id": "reg",
+    "file": "reg.png",
+    "source": "website",
+    "sourceUrl": "https://www.reg.rw/sites/default/files/logo_0.png",
+    "pageUrl": "https://www.reg.rw/",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": true
+  },
+  {
+    "id": "wasac",
+    "file": "wasac.png",
+    "source": "website",
+    "sourceUrl": "https://www.wasac.rw/images/logo-white.png",
+    "pageUrl": "https://www.wasac.rw/en",
+    "rights": "Official logo, used for attribution",
+    "darkBackground": false
+  },
+  {
+    "id": "musanze",
+    "file": "musanze.png",
+    "source": "commons",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/1/17/Coat_of_arms_of_Rwanda.svg",
+    "pageUrl": "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Rwanda.svg",
+    "rights": "Public domain",
+    "darkBackground": false
+  }
+]

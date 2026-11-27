@@ -1,7 +1,14 @@
 import { Stack } from 'expo-router';
 
-export const unstable_settings = { initialRouteName: 'welcome' };
+import { useHeaderOptions } from '@/ui/nav';
+
+export const unstable_settings = { anchor: 'welcome' };
 
 export default function OnboardingLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  const header = useHeaderOptions();
+  return (
+    <Stack screenOptions={header}>
+      <Stack.Screen name="welcome" options={{ headerShown: false }} />
+    </Stack>
+  );
 }

@@ -11,6 +11,7 @@ import { DEMO_TRACKING } from './seed';
 
 export const DEFAULT_PREFS: Prefs = {
   onboarded: false,
+  theme: 'system',
   situations: [],
   studentLevel: null,
   businessSector: null,
@@ -28,7 +29,6 @@ export const DEFAULT_PREFS: Prefs = {
   saved: [],
   muted: [],
   revisionAnswers: {},
-  reports: [],
   steps: { banknotes: [0] },
   ...DEMO_TRACKING,
 };

@@ -1,7 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from 'react-native';
-import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withTiming, ZoomIn } from 'react-native-reanimated';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, type TextInputInstance } from 'react-native';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
@@ -11,20 +11,23 @@ import type { Session } from '@/data/schema';
 import { useAuthParams, useFinishAuth } from '@/features/auth';
 import { toAppError, userMessage } from '@/lib/errors';
 import { haptic } from '@/lib/haptics';
-import { Button } from '@/ui/button';
+import { Tag } from '@/ui/atoms';
+import { Button, TextAction } from '@/ui/button';
 import { Icon } from '@/ui/icon';
-import { BackButton, NavBar } from '@/ui/nav';
+import { SuccessBurst } from '@/ui/success';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, GUTTER, motion, radius, useColors } from '@/ui/theme';
 
 const CodeParams = z.object({ phone: z.string().regex(/^\+\d{6,15}$/), display: z.string(), demo: z.string().optional() });
 
 export default function SmsCode() {
+  const colors = useColors();
+  const styles = useStyles();
   const params = useAuthParams();
   const { phone, display, demo } = CodeParams.parse(useLocalSearchParams());
   const api = useApi();
   const finish = useFinishAuth();
-  const top = useSafeAreaInsets().top;
+  const bottom = useSafeAreaInsets().bottom;
   const input = useRef<TextInputInstance>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +53,8 @@ export default function SmsCode() {
     } catch (e) {
       const err = toAppError(e);
       haptic.error();
-      shake.set(withSequence(withTiming(10, { duration: 50 }), withTiming(-10, { duration: 50 }), withTiming(6, { duration: 50 }), withTiming(0, { duration: 50 })));
+      // A short shake says "not this code" without another word on screen.
+      shake.set(withSequence(withTiming(8, { duration: 50 }), withTiming(-8, { duration: 50 }), withTiming(5, { duration: 50 }), withTiming(0, { duration: 50 })));
       setError(userMessage(err.code));
       setCode('');
     } finally {
@@ -70,24 +74,31 @@ export default function SmsCode() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.white }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <NavBar background={colors.white} left={<BackButton label="Back" />} />
-      <View style={{ paddingTop: top + 52, paddingHorizontal: 20 }}>
-        <Txt v="t1" accessibilityRole="header">
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Once verified, the only way on is Continue; the web header ignores headerBackVisible, hence headerLeft. */}
+      {session && <Stack.Screen options={{ headerBackVisible: false, headerLeft: () => null }} />}
+      <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" bounces={false} contentContainerStyle={styles.body}>
+        <Txt v="title1" accessibilityRole="header">
           Enter the code
         </Txt>
-        <Txt v="co" c={colors.l2} style={{ marginTop: 6 }}>
-          Sent to <Txt v="co" num>{display}</Txt>
+        <Txt v="callout" c={colors.ink2} style={{ marginTop: 8 }}>
+          {'Sent to '}
+          <Txt v="callout" w="semibold" num>
+            {display}
+          </Txt>
         </Txt>
         <Pressable onPress={() => input.current?.focus()} accessibilityLabel={`${SMS_CODE_LENGTH}-digit code, ${code.length} entered`}>
           <Animated.View style={[styles.cells, shakeStyle]}>
-            {Array.from({ length: SMS_CODE_LENGTH }, (_, i) => (
-              <View key={i} style={[styles.cell, { borderColor: error ? colors.red : i === code.length && !verifying ? colors.tint : 'transparent' }]}>
-                <Txt num style={{ fontSize: 28, fontWeight: '600' }}>
-                  {code[i] ?? ''}
-                </Txt>
-              </View>
-            ))}
+            {Array.from({ length: SMS_CODE_LENGTH }, (_, i) => {
+              const active = i === code.length && !verifying && !session;
+              return (
+                <View key={i} style={[styles.cell, error ? styles.cellError : active ? styles.cellActive : null]}>
+                  <Txt v="title2" num>
+                    {code[i] ?? ''}
+                  </Txt>
+                </View>
+              );
+            })}
           </Animated.View>
         </Pressable>
         <TextInput
@@ -109,56 +120,52 @@ export default function SmsCode() {
           importantForAccessibility="no"
         />
         {error && (
-          <Animated.View entering={FadeIn} style={styles.row}>
-            <Icon name="exclamation" size={13} color={colors.red} />
-            <Txt v="fn" c={colors.red} accessibilityLiveRegion="assertive">
+          <Animated.View entering={FadeIn.duration(motion.fast)} style={styles.error}>
+            <Icon name="exclamation" size={14} color={colors.bad} weight="semibold" />
+            <Txt v="footnote" c={colors.bad} accessibilityLiveRegion="assertive" style={{ flex: 1 }}>
               {error}
             </Txt>
           </Animated.View>
         )}
-        <View style={[styles.row, { marginTop: 14, justifyContent: 'space-between' }]}>
+        <View style={styles.links}>
           {left > 0 ? (
-            <Txt v="fn" c={colors.l2} num>{`Resend code in 0:${String(left).padStart(2, '0')}`}</Txt>
+            <Txt v="footnote" c={colors.ink2} num>{`Resend code in 0:${String(left).padStart(2, '0')}`}</Txt>
           ) : (
-            <Pressable accessibilityRole="button" onPress={resend}>
-              <Txt v="fn" w="600" c={colors.tint}>
-                Resend code
-              </Txt>
-            </Pressable>
+            <TextAction label="Resend code" icon="refresh" color={colors.ink} onPress={resend} />
           )}
-          <Pressable accessibilityRole="button" onPress={() => router.back()}>
-            <Txt v="fn" c={colors.tint}>
-              Wrong number?
-            </Txt>
-          </Pressable>
+          <TextAction label="Wrong number?" icon={null} color={colors.ink} onPress={() => router.back()} />
         </View>
-        {demo && (
-          <Txt v="c1" c={colors.l2} style={{ marginTop: 22 }} num>
-            {`Demo build: no SMS is sent. Use ${demo.slice(0, 3)} ${demo.slice(3)}.`}
-          </Txt>
-        )}
-      </View>
+        {demo && <Tag label={`Demo build: no SMS is sent. Use ${demo.slice(0, 3)} ${demo.slice(3)}.`} tone="neutral" icon="info" style={{ marginTop: 22 }} />}
+      </ScrollView>
+
       {session && (
-        <Animated.View entering={FadeIn} style={styles.overlay} accessibilityViewIsModal>
-          <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.ok}>
-            <Icon name="check" size={44} color={colors.white} />
+        <Animated.View entering={FadeIn.duration(motion.base)} style={[styles.overlay, { paddingBottom: Math.max(bottom, 16) }]} accessibilityViewIsModal>
+          <Animated.View entering={FadeIn.duration(motion.base)} style={styles.popup}>
+            <SuccessBurst />
+            <Txt v="title2" center accessibilityRole="header">
+              You’re verified
+            </Txt>
+            <Txt v="callout" c={colors.ink2} center style={{ marginTop: 6 }}>
+              {`${display} is confirmed. Your setup is saved to your account.`}
+            </Txt>
+            <Button label="Continue" onPress={() => finish(params, session)} style={{ marginTop: 22, alignSelf: 'stretch' }} />
           </Animated.View>
-          <Txt v="t2">Verified</Txt>
-          <Txt v="co" c={colors.l2}>
-            Your setup is saved to your account.
-          </Txt>
-          <Button label="Continue" style={{ width: 220, alignSelf: 'center', marginTop: 10 }} onPress={() => finish(params, session)} />
         </Animated.View>
       )}
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createStyles((colors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  body: { paddingHorizontal: GUTTER + 4, paddingTop: 4, paddingBottom: 16 },
   cells: { flexDirection: 'row', gap: 8, marginTop: 28 },
-  cell: { flex: 1, height: 62, borderRadius: 12, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
+  cell: { flex: 1, height: 58, borderRadius: radius.sm, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  cellActive: { borderWidth: 2, borderColor: colors.ink },
+  cellError: { borderWidth: 2, borderColor: colors.bad },
   hidden: { position: 'absolute', width: 1, height: 1, opacity: 0 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  overlay: { ...StyleSheet.absoluteFill, zIndex: 50, backgroundColor: 'rgba(255,255,255,0.96)', alignItems: 'center', justifyContent: 'center', gap: 14 },
-  ok: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-});
+  error: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
+  overlay: { ...StyleSheet.absoluteFill, zIndex: 50, backgroundColor: colors.scrim, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
+  popup: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: 22, paddingBottom: 22, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: colors.card },
+}));

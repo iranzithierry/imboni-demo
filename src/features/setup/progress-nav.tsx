@@ -1,29 +1,49 @@
-import { router, type Href } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
-import { colors, spring } from '@/ui/theme';
-import { BackButton, NavBar, NavButton } from '@/ui/nav';
+import { HeaderActions } from '@/ui/nav';
+import { createStyles, motion, radius } from '@/ui/theme';
 
-/** Onboarding nav: back, step progress, skip. In edit mode it becomes a plain back bar. */
-export function ProgressNav({ step, of = 4, skipTo, mode, backLabel }: { step: number; of?: number; skipTo?: Href; mode: 'onboarding' | 'edit'; backLabel?: string }) {
-  const fill = useAnimatedStyle(() => ({ width: withSpring(`${(step / of) * 100}%`, spring) }));
-  if (mode === 'edit') return <NavBar background={colors.bg} left={<BackButton label={backLabel ?? 'Me'} />} />;
+function Segment({ on }: { on: boolean }) {
+  const styles = useStyles();
+  const fill = useAnimatedStyle(() => ({ width: withTiming(on ? '100%' : '0%', { duration: motion.slow, easing: Easing.out(Easing.cubic) }) }));
   return (
-    <NavBar
-      background={colors.bg}
-      left={<BackButton />}
-      center={
-        <View style={styles.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: of, now: step }}>
-          <Animated.View style={[styles.fill, fill]} />
-        </View>
-      }
-      right={skipTo ? <NavButton label="Skip" onPress={() => router.push(skipTo)} /> : <View style={{ width: 52 }} />}
-    />
+    <View style={styles.segment}>
+      <Animated.View style={[styles.segmentFill, fill]} />
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  track: { width: 150, height: 4, borderRadius: 2, backgroundColor: 'rgba(120,120,128,0.2)', overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 2, backgroundColor: colors.tint },
-});
+function Segments({ step, of }: { step: number; of: number }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.segments} accessibilityRole="progressbar" accessibilityLabel={`Step ${step} of ${of}`} accessibilityValue={{ min: 0, max: of, now: step }}>
+      {Array.from({ length: of }, (_, i) => (
+        <Segment key={i} on={i < step} />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Header for the setup steps, in the native bar. During onboarding the title is the step progress with
+ * Skip on the right; the same screens opened from Profile show a plain title instead.
+ */
+export function SetupHeader({ step, of = 4, skipTo, mode, title }: { step: number; of?: number; skipTo?: Href; mode: 'onboarding' | 'edit'; title?: string }) {
+  if (mode === 'edit') return <Stack.Screen options={{ title: title ?? '' }} />;
+  return (
+    <>
+      <Stack.Screen options={{ headerTitle: () => <Segments step={step} of={of} /> }} />
+      {skipTo && <HeaderActions actions={[{ icon: 'chevronRight', text: 'Skip', label: 'Skip this step', onPress: () => router.push(skipTo) }]} />}
+    </>
+  );
+}
+
+const useStyles = createStyles((colors) =>
+  StyleSheet.create({
+    segments: { width: 168, flexDirection: 'row', gap: 6 },
+    segment: { flex: 1, height: 5, borderRadius: radius.xs, backgroundColor: colors.line, overflow: 'hidden' },
+    segmentFill: { height: 5, borderRadius: radius.xs, backgroundColor: colors.accent },
+  }),
+);

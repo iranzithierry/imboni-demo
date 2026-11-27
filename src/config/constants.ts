@@ -10,3 +10,5 @@ export const DAILY_LIMIT_RANGE = { min: 2, max: 10 } as const;
 export const RATE_ALERT_THRESHOLD_PCT = 0.5;
 export const HOME_TIME_ZONE = 'Africa/Kigali';
 export const WIDGET_TIMELINE_DAYS = 14;
+/** Bump when a cached response shape changes; caches saved under another value are discarded on launch. */
+export const CACHE_SCHEMA_VERSION = '4';

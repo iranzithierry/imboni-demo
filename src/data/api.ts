@@ -17,6 +17,7 @@ import {
   InboxItemSchema,
   InstitutionDetailSchema,
   InstitutionSchema,
+  NoticeSchema,
   OriginalSchema,
   RatesSchema,
   RegulationSchema,
@@ -34,6 +35,7 @@ import {
   type InboxItem,
   type Institution,
   type InstitutionDetail,
+  type Notice,
   type Original,
   type Rates,
   type Regulation,
@@ -60,6 +62,8 @@ export interface ImboniApi {
   institutions(signal?: AbortSignal): Promise<Institution[]>;
   institutionDetail(id: string, signal?: AbortSignal): Promise<InstitutionDetail | null>;
   storylines(signal?: AbortSignal): Promise<Storyline[]>;
+  notices(signal?: AbortSignal): Promise<Notice[]>;
+  regulations(signal?: AbortSignal): Promise<Regulation[]>;
   regulation(id: string, signal?: AbortSignal): Promise<Regulation>;
   directory(id: string, signal?: AbortSignal): Promise<DirectoryEntry>;
   original(id: string, signal?: AbortSignal): Promise<Original>;
@@ -141,6 +145,8 @@ export function createMockApi(config: MockConfig): ImboniApi {
     institutions: (signal) => call(z.array(InstitutionSchema), () => fx.institutions, signal),
     institutionDetail: (id, signal) => call(InstitutionDetailSchema.nullable(), () => fx.institutionDetails.find((d) => d.institutionId === id) ?? null, signal),
     storylines: (signal) => call(z.array(StorylineSchema), () => fx.storylines, signal),
+    notices: (signal) => call(z.array(NoticeSchema), (now) => fx.notices(now), signal),
+    regulations: (signal) => call(z.array(RegulationSchema), () => fx.regulations, signal),
     regulation: (id, signal) => call(RegulationSchema, () => byId(fx.regulations, id), signal),
     directory: (id, signal) => call(DirectoryEntrySchema, () => byId(fx.directory, id), signal),
     original: (id, signal) => call(OriginalSchema, () => byId(fx.originals, id), signal),

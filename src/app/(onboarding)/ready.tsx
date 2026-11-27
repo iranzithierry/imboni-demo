@@ -1,40 +1,37 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Action } from '@/data/schema';
 import { useActions, useInstitutionLookup, usePlaceTimeZone, useToday } from '@/features/data';
 import { situationLabel } from '@/features/setup/situations';
 import { useSuggestedSources } from '@/features/setup/sources';
 import { useTracker } from '@/features/tracking';
+import { formatDate } from '@/lib/dates';
 import { haptic } from '@/lib/haptics';
 import { toHref } from '@/lib/links';
 import { zoneCity, type Place } from '@/lib/places';
 import { usePrefs } from '@/state/prefs';
 import { useSession } from '@/state/session';
-import { GlassBadge, Gradient, Initials, Tile } from '@/ui/atoms';
-import { Button, CapButton } from '@/ui/button';
-import { Icon } from '@/ui/icon';
-import { Cell, Group, GroupHeader, INSET } from '@/ui/list';
-import { Dock, Screen, useDockInset } from '@/ui/nav';
+import { IconTile, Tag } from '@/ui/atoms';
+import { Button } from '@/ui/button';
+import { Group, GroupLabel, INSET, Row } from '@/ui/list';
+import { InstitutionLogo } from '@/ui/logo';
+import { Dock, useDockInset } from '@/ui/nav';
+import { Photo } from '@/ui/photo';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, GUTTER, radius, useColors } from '@/ui/theme';
 import { useToast } from '@/ui/toast';
 
 /** The first required action that applies to this person and is still open. */
 function firstRequired(actions: readonly Action[], situations: readonly string[], place: Place, today: string) {
   const open = actions.filter((a) => a.required && a.deadline >= today);
-  return (
-    (place.mode === 'abroad' ? open.find((a) => a.forAbroad) : undefined) ??
-    open.find((a) => a.forSituations.some((s) => situations.includes(s))) ??
-    open[0]
-  );
+  return (place.mode === 'abroad' ? open.find((a) => a.forAbroad) : undefined) ?? open.find((a) => a.forSituations.some((s) => situations.includes(s))) ?? open[0];
 }
 
 export default function Ready() {
-  const top = useSafeAreaInsets().top;
+  const colors = useColors();
+  const styles = useStyles();
   const bottom = useDockInset();
   const today = useToday();
   const city = zoneCity(usePlaceTimeZone());
@@ -60,12 +57,11 @@ export default function Ready() {
   const toggleTrack = async () => {
     if (!action) return;
     setBusy(true);
-    if (isTracked) {
-      await tracker.stop(action.id);
-    } else {
+    if (isTracked) await tracker.stop(action.id);
+    else {
       const outcome = await tracker.start(action, ['Me'], 'standard', false);
       haptic.success();
-      if (outcome.reminders === 'permission_denied') toast({ message: 'Tracking. Turn on notifications in Settings to get reminders.', icon: 'bell', iconColor: colors.orange });
+      if (outcome.reminders === 'permission_denied') toast({ message: 'Tracking. Turn on notifications in Settings to get reminders.', icon: 'bell' });
     }
     setBusy(false);
   };
@@ -78,58 +74,59 @@ export default function Ready() {
   };
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={{ paddingTop: top, paddingBottom: bottom }}>
-        <View style={styles.hero}>
-          <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.check}>
-            <Icon name="check" size={42} color={colors.white} />
-          </Animated.View>
-          <Txt v="lt" center style={{ marginTop: 20 }} accessibilityRole="header">
+    <View style={{ flex: 1 }}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: bottom }}>
+        <View style={styles.head}>
+          <IconTile icon="check" tone="brand" solid size={64} />
+          <Txt v="title1" style={{ marginTop: 20 }} accessibilityRole="header">
             You’re all set
           </Txt>
-          <Txt v="co" c={colors.l2} center style={{ marginTop: 6 }}>
-            {`Imboni is watching ${watching || suggested.length} official sources for you.${action ? ' One thing needs you already.' : ''}`}
+          <Txt v="callout" c={colors.ink2} style={{ marginTop: 8 }}>
+            {`Imboni is watching ${watching || suggested.length} official sources for you.${action ? ' One thing already needs you.' : ''}`}
           </Txt>
         </View>
 
         {action && (
-          <Animated.View entering={FadeInUp.delay(150).springify().damping(18)} style={styles.card}>
-            <Gradient name="brand" />
-            <View style={styles.between}>
-              <GlassBadge label="Required for you" icon="exclamation" />
-              <Initials label={lookup(action.institutionId).mono} color="tint" size="s" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
+          <View style={styles.card}>
+            {action.photo && <Photo id={action.photo} aspect={16 / 8} radius={radius.lg} />}
+            <View style={styles.cardBody}>
+              <View style={styles.between}>
+                <Tag label="Required for you" tone="onDark" icon="exclamation" />
+                <InstitutionLogo id={action.institutionId} label={lookup(action.institutionId).mono} size="s" />
+              </View>
+              <Txt v="title2" c={colors.white} style={{ marginTop: 16 }}>
+                {action.title}
+              </Txt>
+              <Txt v="subhead" c={colors.nightInk2} style={{ marginTop: 6 }}>
+                {`${lookup(action.institutionId).name} · due ${formatDate.long(action.deadline)}`}
+              </Txt>
+              <View style={styles.cardActions}>
+                <Button label={busy ? 'Saving…' : isTracked ? 'Tracking' : 'Track it'} icon={isTracked ? 'check' : 'plus'} variant="light" size="md" hug onPress={toggleTrack} />
+                {action.directoryId && <Button label="Where to go" variant="onDark" size="md" hug onPress={() => router.push(toHref({ kind: 'directory', id: action.directoryId ?? '' }))} />}
+              </View>
             </View>
-            <Txt v="t2" c={colors.white} style={{ marginTop: 22 }}>
-              {action.title}
-            </Txt>
-            <Txt v="sh" c="rgba(255,255,255,0.8)" style={{ marginTop: 4 }}>
-              {`${lookup(action.institutionId).name}. Due by ${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(action.deadline))}.`}
-            </Txt>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
-              <CapButton label={busy ? 'Saving…' : isTracked ? 'Tracking' : 'Track'} icon={isTracked ? 'check' : 'plus'} variant={isTracked ? 'solid' : 'glass'} height={36} onPress={toggleTrack} />
-              {action.directoryId && <CapButton label="Where to go" variant="glass" height={36} onPress={() => router.push(toHref({ kind: 'directory', id: action.directoryId ?? '' }))} />}
-            </View>
-          </Animated.View>
+          </View>
         )}
 
-        <GroupHeader>Your setup</GroupHeader>
+        <GroupLabel>Your setup</GroupLabel>
         <Group inset={INSET.tile}>
-          <Cell left={<Tile icon="people" color="pink" />} title="Situations" detail={situations.map(situationLabel).join(', ') || 'None'} />
-          <Cell left={<Tile icon="globe" color="indigo" />} title="Time zone" detail={city} />
-          <Cell left={<Tile icon="bell" color="orange" />} title="Digest" detail={digest === 'daily' ? 'Daily 18:00' : 'Sundays 18:00'} />
-          <Cell left={<Tile icon="lock" color="green" />} title="Account" detail={account ? 'Synced' : 'On this iPhone'} />
+          <Row left={<IconTile icon="people" tone="pink" solid />} title="Situations" detail={situations.map(situationLabel).join(', ') || 'None'} />
+          <Row left={<IconTile icon="globe" tone="sky" solid />} title="Time zone" detail={city} />
+          <Row left={<IconTile icon="bell" tone="brand" solid />} title="Digest" detail={digest === 'daily' ? 'Daily at 18:00' : 'Sundays at 18:00'} />
+          <Row left={<IconTile icon="lock" tone="green" solid />} title="Account" detail={account ? 'Synced' : 'On this phone'} />
         </Group>
       </ScrollView>
       <Dock>
-        <Button label="Open Imboni" onPress={finish} />
+        <Button label="Open Imboni" trailingIcon="arrowRight" onPress={finish} />
       </Dock>
-    </Screen>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  hero: { alignItems: 'center', paddingTop: 40, paddingHorizontal: 24 },
-  check: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 30px rgba(52,199,89,0.35)' },
-  card: { marginTop: 26, marginHorizontal: 16, borderRadius: 22, overflow: 'hidden', padding: 18 },
+const useStyles = createStyles((colors) => StyleSheet.create({
+  head: { paddingHorizontal: GUTTER + 4, paddingTop: 8 },
+  card: { marginTop: 28, marginHorizontal: GUTTER, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: colors.night, padding: 8 },
+  cardBody: { padding: 12, paddingTop: 14 },
   between: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-});
+  cardActions: { flexDirection: 'row', gap: 8, marginTop: 18 },
+}));

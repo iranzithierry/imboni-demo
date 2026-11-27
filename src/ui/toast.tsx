@@ -1,6 +1,6 @@
 import { createContext, use, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { Easing, FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { UNDO_WINDOW_MS } from '@/config/constants';
@@ -8,17 +8,19 @@ import { haptic } from '@/lib/haptics';
 
 import { Icon, type IconName } from './icon';
 import { Txt } from './text';
-import { colors } from './theme';
+import { createStyles, motion, useColors } from './theme';
 
-type ToastInput = { message: string; icon?: IconName; iconColor?: string; action?: { label: string; onPress: () => void }; durationMs?: number; aboveTabBar?: boolean };
+type ToastInput = { message: string; icon?: IconName; action?: { label: string; onPress: () => void }; durationMs?: number };
 type ToastState = ToastInput & { id: number };
 
 const ToastContext = createContext<((t: ToastInput) => void) | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const colors = useColors();
+  const styles = useStyles();
   const [toast, setToast] = useState<ToastState | null>(null);
   const seq = useRef(0);
-  const bottom = useSafeAreaInsets().bottom;
+  const top = useSafeAreaInsets().top;
   const show = useCallback((t: ToastInput) => {
     seq.current += 1;
     setToast({ ...t, id: seq.current });
@@ -34,29 +36,33 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {toast && (
         <Animated.View
           key={toast.id}
-          entering={FadeInDown.springify().damping(20)}
-          exiting={FadeOutDown.duration(180)}
+          entering={FadeInUp.duration(motion.base).easing(Easing.out(Easing.cubic))}
+          exiting={FadeOutUp.duration(motion.fast)}
           accessibilityLiveRegion="polite"
           accessibilityRole="alert"
-          style={[styles.toast, { bottom: bottom + (toast.aboveTabBar ? 62 : 16) }]}>
-          {toast.icon && <Icon name={toast.icon} size={20} color={toast.iconColor ?? colors.green} />}
-          <Txt v="sh" c={colors.white} style={styles.grow}>
-            {toast.message}
-          </Txt>
-          {toast.action && (
-            <Pressable
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={() => {
-                haptic.tap();
-                toast.action?.onPress();
-                setToast(null);
-              }}>
-              <Txt v="sh" w="600" c={colors.dark.tint}>
-                {toast.action.label}
-              </Txt>
-            </Pressable>
-          )}
+          pointerEvents="box-none"
+          style={[styles.wrap, { top: top + 6 }]}>
+          <View style={styles.toast}>
+            {toast.icon && <Icon name={toast.icon} size={14} color={colors.accent} weight="semibold" />}
+            <Txt v="footnote" w="medium" c={colors.canvas} numberOfLines={2} style={styles.text}>
+              {toast.message}
+            </Txt>
+            {toast.action && (
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={10}
+                onPress={() => {
+                  haptic.tap();
+                  toast.action?.onPress();
+                  setToast(null);
+                }}
+                style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}>
+                <Txt v="footnote" w="semibold" c={colors.accent}>
+                  {toast.action.label}
+                </Txt>
+              </Pressable>
+            )}
+          </View>
         </Animated.View>
       )}
     </ToastContext>
@@ -69,7 +75,12 @@ export function useToast() {
   return show;
 }
 
-const styles = StyleSheet.create({
-  toast: { position: 'absolute', left: 16, right: 16, zIndex: 100, minHeight: 50, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(30,30,30,0.94)' },
-  grow: { flex: 1 },
-});
+/** A small pill under the status bar, like a system banner: one line, out of the way of the content. */
+const useStyles = createStyles((colors) =>
+  StyleSheet.create({
+    wrap: { position: 'absolute', left: 0, right: 0, zIndex: 100, alignItems: 'center' },
+    toast: { maxWidth: 340, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.ink, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+    text: { flexShrink: 1 },
+    action: { marginLeft: 4, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.ink3 },
+  }),
+);

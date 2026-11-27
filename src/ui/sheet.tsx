@@ -6,7 +6,10 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { haptic } from '@/lib/haptics';
 
-import { colors, spring } from './theme';
+import { createStyles, radius } from './theme';
+
+// Sheet follows the finger and settles without overshoot.
+const SETTLE = { damping: 40, stiffness: 320, mass: 1, overshootClamping: true } as const;
 
 type Props = {
   /** Visible heights in points, ascending (e.g. peek, half, full). */
@@ -27,6 +30,7 @@ const project = (velocity: number) => {
 
 /** Persistent in-screen sheet: content behind stays interactive (unlike a modal sheet). */
 export function DetentSheet({ detents, index, onIndexChange, header, children, style }: Props) {
+  const styles = useStyles();
   const max = detents[detents.length - 1] ?? 0;
   const offsetFor = (i: number) => max - (detents[i] ?? max);
   const y = useSharedValue(offsetFor(index));
@@ -34,7 +38,7 @@ export function DetentSheet({ detents, index, onIndexChange, header, children, s
   const offsets = detents.map((d) => max - d);
 
   useEffect(() => {
-    y.set(withSpring(max - (detents[index] ?? max), spring));
+    y.set(withSpring(max - (detents[index] ?? max), SETTLE));
   }, [index, detents, max, y]);
 
   const settle = (next: number) => {
@@ -62,7 +66,7 @@ export function DetentSheet({ detents, index, onIndexChange, header, children, s
       for (let i = 1; i < offsets.length; i++) {
         if (Math.abs((offsets[i] ?? 0) - target) < Math.abs((offsets[best] ?? 0) - target)) best = i;
       }
-      y.set(withSpring(offsets[best] ?? 0, { ...spring, velocity: e.velocityY }));
+      y.set(withSpring(offsets[best] ?? 0, { ...SETTLE, velocity: e.velocityY }));
       scheduleOnRN(settle, best);
     },
   });
@@ -101,7 +105,7 @@ export function DetentSheet({ detents, index, onIndexChange, header, children, s
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createStyles((colors) => StyleSheet.create({
   sheet: {
     position: 'absolute',
     left: 0,
@@ -109,12 +113,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 20,
     backgroundColor: colors.card,
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     borderCurve: 'continuous',
-    boxShadow: '0 -10px 40px rgba(0,0,0,0.12)',
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   grabArea: { paddingTop: 5, paddingBottom: 6, alignItems: 'center' },
-  grab: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.l3 },
+  grab: { width: 36, height: 4, borderRadius: radius.xs, backgroundColor: colors.pearl },
   body: { flex: 1 },
-});
+}));

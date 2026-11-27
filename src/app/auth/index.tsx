@@ -1,29 +1,33 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, LinearTransition, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { Easing, FadeIn, LinearTransition, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
 import { useApi } from '@/data/api';
 import { useAuthParams, useFinishAuth } from '@/features/auth';
 import { toAppError, userMessage } from '@/lib/errors';
 import { haptic } from '@/lib/haptics';
-import { Gradient } from '@/ui/atoms';
-import { Button, CircleButton } from '@/ui/button';
+import { BrandMark } from '@/ui/brand';
+import { Button } from '@/ui/button';
 import { Icon } from '@/ui/icon';
-import { PressableScale } from '@/ui/pressable';
+import { closeAction, HeaderActions } from '@/ui/nav';
+import { Highlight } from '@/ui/pressable';
 import { Txt } from '@/ui/text';
-import { colors, spring } from '@/ui/theme';
+import { createStyles, GUTTER, motion, radius, useColors, useScheme } from '@/ui/theme';
 import { useToast } from '@/ui/toast';
 
 const ROWS = [
-  { label: 'Follow and track', guest: 'This iPhone', account: true },
+  { label: 'Follow and track', guest: 'This phone', account: true },
   { label: 'Report mistakes', guest: null, account: true },
   { label: 'Is this true?', guest: null, account: true },
 ] as const;
 
 export default function AuthSheet() {
+  const colors = useColors();
+  const scheme = useScheme();
+  const styles = useStyles();
   const params = useAuthParams();
   const finish = useFinishAuth();
   const api = useApi();
@@ -31,7 +35,7 @@ export default function AuthSheet() {
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [busy, setBusy] = useState<'apple' | 'google' | null>(null);
   const [compare, setCompare] = useState(false);
-  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: withSpring(compare ? '180deg' : '0deg', spring) }] }));
+  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: withTiming(compare ? '180deg' : '0deg', { duration: motion.base, easing: Easing.out(Easing.quad) }) }] }));
   const onboarding = params.next === 'ready';
 
   useEffect(() => {
@@ -45,7 +49,7 @@ export default function AuthSheet() {
       await finish(params, await api.signIn('apple', credential.identityToken));
     } catch (e) {
       // The user closing Apple's sheet is not an error.
-      if (!(e instanceof Error && 'code' in e && e.code === 'ERR_REQUEST_CANCELED')) toast({ message: userMessage(toAppError(e).code), icon: 'warning', iconColor: colors.orange });
+      if (!(e instanceof Error && 'code' in e && e.code === 'ERR_REQUEST_CANCELED')) toast({ message: userMessage(toAppError(e).code), icon: 'warning' });
     } finally {
       setBusy(null);
     }
@@ -56,89 +60,105 @@ export default function AuthSheet() {
     try {
       await finish(params, await api.signIn('google', null));
     } catch (e) {
-      toast({ message: userMessage(toAppError(e).code), icon: 'warning', iconColor: colors.orange });
+      toast({ message: userMessage(toAppError(e).code), icon: 'warning' });
     } finally {
       setBusy(null);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.body} bounces={false}>
-      <View style={styles.close}>
-        <CircleButton icon="xmark" label="Close" onPress={() => router.back()} />
-      </View>
-      <View style={styles.head}>
-        <View style={styles.appIcon}>
-          <Gradient name="institution" angle="vertical" />
-          <Icon name="eye" size={34} color={colors.white} />
-        </View>
-        <Txt v="t2" center style={{ marginTop: 16 }} accessibilityRole="header">
+    <View style={styles.screen}>
+      <HeaderActions actions={[closeAction]} />
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.body} bounces={false}>
+        <BrandMark size={56} />
+        <Txt v="title1" style={{ marginTop: 18 }} accessibilityRole="header">
           {onboarding ? 'Save your setup' : 'Sign in'}
         </Txt>
-        <Txt v="co" c={colors.l2} center style={{ marginTop: 6 }}>
-          Sync follows and reminders across devices and help fix mistakes.
+        <Txt v="callout" c={colors.ink2} style={{ marginTop: 8 }}>
+          Sync follows and reminders across devices, and help fix mistakes in notices.
         </Txt>
-      </View>
-      <View style={styles.buttons}>
-        {appleAvailable ? (
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={14}
-            style={{ height: 50, opacity: busy === 'apple' ? 0.6 : 1 }}
-            onPress={withApple}
-          />
-        ) : null}
-        <PressableScale scaleTo={0.97} feedback="tap" accessibilityRole="button" onPress={withGoogle} disabled={busy !== null} style={styles.google}>
-          <GoogleMark />
-          <Txt v="hl">{busy === 'google' ? 'Signing in…' : 'Continue with Google'}</Txt>
-        </PressableScale>
-        <Button label="Continue with phone" variant="grayInk" icon="phone" onPress={() => router.push({ pathname: '/auth/phone', params: { next: params.next, id: params.id } })} />
-        {onboarding && <Button label="Continue as guest" variant="plain" onPress={() => finish(params, null)} />}
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: compare }}
-        onPress={() => {
-          haptic.selection();
-          setCompare((c) => !c);
-        }}
-        style={styles.compareBtn}>
-        <Txt v="fn" c={colors.l2}>
-          Guest vs account
-        </Txt>
-        <Animated.View style={chevron}>
-          <Icon name="chevronDown" size={13} color={colors.l2} />
-        </Animated.View>
-      </Pressable>
-      {compare && (
-        <Animated.View entering={FadeIn} layout={LinearTransition} style={styles.table}>
-          <View style={styles.tr}>
-            <View style={{ flex: 1 }} />
-            <Txt v="fn" w="600" c={colors.l2} center style={styles.col}>
-              Guest
+
+        <View style={styles.buttons}>
+          <Button label="Continue with phone" icon="phone" onPress={() => router.push({ pathname: '/auth/phone', params: { next: params.next, id: params.id } })} />
+          {appleAvailable ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              // The native button only reads its style when it mounts, so a theme change remounts it.
+              key={scheme}
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={scheme === 'dark' ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={radius.sm}
+              style={{ height: 52, opacity: busy === 'apple' ? 0.6 : 1 }}
+              onPress={withApple}
+            />
+          ) : null}
+          <Highlight accessibilityRole="button" accessibilityLabel="Continue with Google" accessibilityState={{ busy: busy === 'google', disabled: busy !== null }} feedback="tap" disabled={busy !== null} onPress={withGoogle} pressedStyle={{ opacity: 0.72 }} style={styles.google}>
+            <GoogleMark />
+            <Txt v="callout" w="semibold">
+              {busy === 'google' ? 'Signing in…' : 'Continue with Google'}
             </Txt>
-            <Txt v="fn" w="600" c={colors.l2} center style={styles.col}>
-              Account
-            </Txt>
-          </View>
-          {ROWS.map((r) => (
-            <View key={r.label} style={[styles.tr, styles.trLine]}>
-              <Txt v="sh" style={{ flex: 1 }}>
-                {r.label}
+          </Highlight>
+          {onboarding && (
+            <Highlight accessibilityRole="button" onPress={() => finish(params, null)} style={styles.guest}>
+              <Txt v="subhead" w="semibold" center>
+                Continue as guest
               </Txt>
-              <View style={styles.col}>{r.guest ? <Txt v="fn" c={colors.l2} center>{r.guest}</Txt> : <Icon name="minus" size={17} color={colors.l3} />}</View>
-              <View style={styles.col}>
-                <Icon name="check" size={17} color={colors.green} />
-              </View>
+            </Highlight>
+          )}
+        </View>
+
+        <Highlight
+          accessibilityRole="button"
+          accessibilityState={{ expanded: compare }}
+          onPress={() => {
+            haptic.selection();
+            setCompare((c) => !c);
+          }}
+          style={styles.compareBtn}>
+          <Txt v="footnote" w="medium" c={colors.ink2}>
+            Guest or account?
+          </Txt>
+          <Animated.View style={chevron}>
+            <Icon name="chevronDown" size={11} color={colors.ink2} weight="semibold" />
+          </Animated.View>
+        </Highlight>
+        {compare && (
+          <Animated.View entering={FadeIn.duration(motion.base)} layout={LinearTransition.duration(motion.base)} style={styles.table}>
+            <View style={styles.tr}>
+              <View style={{ flex: 1 }} />
+              <Txt v="caption" c={colors.ink2} center style={styles.col}>
+                Guest
+              </Txt>
+              <Txt v="caption" c={colors.ink2} center style={styles.col}>
+                Account
+              </Txt>
             </View>
-          ))}
-        </Animated.View>
-      )}
-      <Txt v="c1" c={colors.l2} center style={{ paddingTop: 10, paddingHorizontal: 8 }}>
-        By continuing you accept the Terms and Privacy Notice. Data stays in Rwanda.
-      </Txt>
-    </ScrollView>
+            {ROWS.map((r) => (
+              <View key={r.label} style={[styles.tr, styles.trLine]} accessibilityLabel={`${r.label}: guest ${r.guest ?? 'no'}, account yes`}>
+                <Txt v="subhead" style={{ flex: 1 }}>
+                  {r.label}
+                </Txt>
+                <View style={styles.col}>
+                  {r.guest ? (
+                    <Txt v="caption" c={colors.ink2} center>
+                      {r.guest}
+                    </Txt>
+                  ) : (
+                    <Icon name="minus" size={15} color={colors.ink3} />
+                  )}
+                </View>
+                <View style={styles.col}>
+                  <Icon name="check" size={15} color={colors.ok} weight="semibold" />
+                </View>
+              </View>
+            ))}
+          </Animated.View>
+        )}
+
+        <Txt v="caption" c={colors.ink3} style={{ marginTop: 18 }}>
+          By continuing you accept the Terms and Privacy Notice. Personal data stays in Rwanda.
+        </Txt>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -153,16 +173,15 @@ function GoogleMark() {
   );
 }
 
-const styles = StyleSheet.create({
-  body: { paddingHorizontal: 20, paddingBottom: 40 },
-  close: { alignItems: 'flex-end', paddingTop: 14 },
-  head: { alignItems: 'center', paddingTop: 8 },
-  appIcon: { width: 64, height: 64, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(10,82,233,0.3)' },
-  buttons: { gap: 10, paddingTop: 26 },
-  google: { height: 50, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(60,60,67,0.25)', backgroundColor: colors.white },
-  compareBtn: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
-  table: { backgroundColor: colors.bg, borderRadius: 12, paddingVertical: 4, paddingHorizontal: 14 },
-  tr: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  trLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.sep },
-  col: { width: 72, alignItems: 'center' },
-});
+const useStyles = createStyles((colors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  body: { paddingHorizontal: GUTTER + 4, paddingTop: 4, paddingBottom: 40 },
+  buttons: { gap: 10, paddingTop: 28 },
+  google: { height: 52, borderRadius: radius.sm, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  guest: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  compareBtn: { height: 44, flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  table: { borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, paddingVertical: 4, paddingHorizontal: 14 },
+  tr: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  trLine: { borderTopWidth: 1, borderTopColor: colors.line },
+  col: { width: 76, alignItems: 'center' },
+}));

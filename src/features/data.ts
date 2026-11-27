@@ -51,7 +51,7 @@ export function useInstitutions() {
   return useQuery(q.institutions(useApi()));
 }
 
-const UNKNOWN: Institution = { id: 'unknown', mono: '?', name: 'Unknown source', kind: '', color: 'gray', why: '', situations: [], forAbroad: false, forEveryone: false };
+const UNKNOWN: Institution = { id: 'unknown', mono: '?', name: 'Unknown source', kind: '', sector: 'city', why: '', about: '', situations: [], forAbroad: false, forEveryone: false };
 
 export function useInstitutionLookup() {
   const { data } = useInstitutions();
@@ -61,6 +61,15 @@ export function useInstitutionLookup() {
 export function useAction(id: string) {
   const { data, ...rest } = useActions();
   return { action: data?.find((a) => a.id === id), ...rest };
+}
+
+export function useNotice(id: string) {
+  const { data, ...rest } = useQuery(q.notices(useApi()));
+  return { notice: data?.find((n) => n.id === id), ...rest };
+}
+
+export function useStorylines() {
+  return useQuery(q.storylines(useApi()));
 }
 
 export function useInboxUnread(): number {

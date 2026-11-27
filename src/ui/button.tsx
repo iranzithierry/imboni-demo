@@ -1,137 +1,220 @@
-import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { haptic } from '@/lib/haptics';
 
 import { Icon, type IconName } from './icon';
-import { PressableScale } from './pressable';
+import { Highlight } from './pressable';
 import { Txt } from './text';
-import { colors, radius } from './theme';
+import { createStyles, palettes, radius, useColors, type Palette } from './theme';
 
-const VARIANTS = {
-  fill: { bg: colors.tint, fg: colors.white },
-  tinted: { bg: 'rgba(10,82,233,0.12)', fg: colors.tint },
-  gray: { bg: colors.fill, fg: colors.tint },
-  grayInk: { bg: colors.fill, fg: colors.l1 },
-  white: { bg: colors.white, fg: colors.l1 },
-  black: { bg: colors.l1, fg: colors.white },
-  plain: { bg: 'transparent', fg: colors.tint },
-  plainLight: { bg: 'transparent', fg: colors.white },
-  red: { bg: 'rgba(255,59,48,0.12)', fg: colors.red },
-} as const;
-export type ButtonVariant = keyof typeof VARIANTS;
+const EDGE = 3;
+const SIZE = { lg: 52, md: 44, sm: 36 } as const;
+type Size = keyof typeof SIZE;
+
+const flat = (colors: Palette) =>
+  ({
+    ink: { bg: colors.ink, fg: colors.canvas, border: colors.ink },
+    secondary: { bg: colors.card, fg: colors.ink, border: colors.line },
+    quiet: { bg: colors.fill, fg: colors.ink, border: colors.fill },
+    tinted: { bg: colors.accentWash, fg: colors.accentInk, border: colors.accentWash },
+    danger: { bg: colors.card, fg: colors.bad, border: colors.line },
+    light: { bg: colors.white, fg: palettes.light.ink, border: colors.white },
+    onDark: { bg: 'rgba(255,255,255,0.12)', fg: colors.white, border: 'rgba(255,255,255,0.18)' },
+  }) as const;
+type FlatVariant = keyof ReturnType<typeof flat>;
+export type ButtonVariant = 'primary' | FlatVariant;
 
 type ButtonProps = {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  size?: Size;
   icon?: IconName;
+  trailingIcon?: IconName;
   disabled?: boolean;
   loading?: boolean;
-  compact?: boolean;
-  /** Square icon button; `label` becomes the accessibility label. */
-  iconOnly?: boolean;
+  /** Shrink to the label instead of filling the row. */
+  hug?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityHint?: string;
 };
 
-export function Button({ label, onPress, variant = 'fill', icon, disabled, loading, compact, iconOnly, style, accessibilityHint }: ButtonProps) {
-  const v = VARIANTS[variant];
-  const off = disabled || loading;
-  const bg = disabled ? colors.fill : v.bg;
-  const fg = disabled ? colors.l3 : v.fg;
-  return (
-    <PressableScale
-      scaleTo={0.97}
-      feedback="tap"
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !!off, busy: !!loading }}
-      accessibilityHint={accessibilityHint}
-      accessibilityLabel={label}
-      disabled={off}
-      onPress={onPress}
-      style={[styles.btn, { backgroundColor: bg, height: variant.startsWith('plain') ? 44 : compact ? 44 : 50 }, iconOnly && styles.square, style]}>
-      {loading ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <View style={styles.row}>
-          {icon && <Icon name={icon} size={iconOnly ? 20 : 17} color={fg} />}
-          {!iconOnly && (
-            <Txt v="hl" c={fg} style={compact && { fontSize: 15 }} numberOfLines={1}>
-              {label}
-            </Txt>
-          )}
-        </View>
-      )}
-    </PressableScale>
-  );
+export function Button({ variant = 'primary', ...props }: ButtonProps) {
+  return variant === 'primary' ? <PrimaryButton {...props} /> : <FlatButton variant={variant} {...props} />;
 }
 
-const CAP = {
-  tinted: { bg: 'rgba(10,82,233,0.12)', fg: colors.tint },
-  solid: { bg: colors.tint, fg: colors.white },
-  gray: { bg: colors.fill, fg: colors.l1 },
-  glass: { bg: 'rgba(255,255,255,0.2)', fg: colors.white },
-  dark: { bg: colors.black, fg: colors.white },
-} as const;
-
-type CapProps = {
-  label: string;
-  onPress?: () => void;
-  variant?: keyof typeof CAP;
-  icon?: IconName;
-  trailingIcon?: IconName;
-  height?: number;
-  accessibilityState?: { selected?: boolean; expanded?: boolean };
-};
-
-/** Capsule button (`.cap-btn`). Without onPress it renders as a static chip. */
-export function CapButton({ label, onPress, variant = 'tinted', icon, trailingIcon, height = 30, accessibilityState }: CapProps) {
-  const v = CAP[variant];
-  const content = (
-    <>
-      {icon && <Icon name={icon} size={13} color={v.fg} />}
-      <Txt v="sh" c={v.fg} w="600" numberOfLines={1}>
+function Content({ label, icon, trailingIcon, fg, loading, size }: { label: string; icon?: IconName; trailingIcon?: IconName; fg: string; loading?: boolean; size: Size }) {
+  const styles = useStyles();
+  if (loading) return <ActivityIndicator color={fg} />;
+  return (
+    <View style={styles.row}>
+      {icon && <Icon name={icon} size={size === 'sm' ? 15 : 17} color={fg} weight="semibold" />}
+      <Txt v={size === 'sm' ? 'subhead' : 'callout'} w="semibold" c={fg} numberOfLines={1}>
         {label}
       </Txt>
-      {trailingIcon && <Icon name={trailingIcon} size={13} color={v.fg} />}
-    </>
-  );
-  const style = [styles.cap, { backgroundColor: v.bg, height, borderRadius: height / 2 }];
-  if (!onPress) return <View style={style}>{content}</View>;
-  return (
-    <PressableScale scaleTo={0.95} feedback="tap" accessibilityRole="button" accessibilityState={accessibilityState} onPress={onPress} style={style}>
-      {content}
-    </PressableScale>
+      {trailingIcon && <Icon name={trailingIcon} size={size === 'sm' ? 13 : 15} color={fg} weight="semibold" />}
+    </View>
   );
 }
 
-type CircleProps = {
+/**
+ * The one orange action on a screen. Its burnt edge sits under the face like a sticker on paper,
+ * and pressing pushes the face down onto it.
+ */
+function PrimaryButton({ label, onPress, size = 'lg', icon, trailingIcon, disabled, loading, hug, style, accessibilityHint }: Omit<ButtonProps, 'variant'>) {
+  const colors = useColors();
+  const styles = useStyles();
+  const h = SIZE[size];
+  const down = useSharedValue(0);
+  const face = useAnimatedStyle(() => ({
+    transform: [{ translateY: withTiming(down.get() * EDGE, { duration: 70, easing: Easing.out(Easing.quad) }) }],
+  }));
+  const off = disabled || loading;
+  if (disabled) {
+    return (
+      <View accessibilityRole="button" accessibilityState={{ disabled: true }} accessibilityLabel={label} style={[{ height: h + EDGE, paddingTop: EDGE }, hug && styles.hug, style]}>
+        <View style={[styles.face, { height: h, backgroundColor: colors.fill }]}>
+          <Content label={label} icon={icon} trailingIcon={trailingIcon} fg={colors.ink3} size={size} />
+        </View>
+      </View>
+    );
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ busy: !!loading }}
+      disabled={off}
+      onPressIn={() => down.set(1)}
+      onPressOut={() => down.set(0)}
+      onPress={() => {
+        haptic.tap();
+        onPress();
+      }}
+      style={[{ height: h + EDGE }, hug && styles.hug, style]}>
+      <View style={[styles.edge, { top: EDGE }]} />
+      <Animated.View style={[styles.face, { height: h, backgroundColor: colors.accent }, face]}>
+        <Content label={label} icon={icon} trailingIcon={trailingIcon} fg={colors.white} loading={loading} size={size} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function FlatButton({ label, onPress, variant, size = 'lg', icon, trailingIcon, disabled, loading, hug, style, accessibilityHint }: ButtonProps & { variant: FlatVariant }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const v = flat(colors)[variant];
+  const fg = disabled ? colors.ink3 : v.fg;
+  return (
+    <Highlight
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      disabled={disabled || loading}
+      feedback="tap"
+      onPress={onPress}
+      pressedStyle={{ opacity: 0.72 }}
+      style={[styles.face, { height: SIZE[size], backgroundColor: disabled ? colors.fill : v.bg, borderColor: disabled ? colors.fill : v.border, borderWidth: 1, paddingHorizontal: size === 'sm' ? 12 : 18 }, hug && styles.hug, style]}>
+      <Content label={label} icon={icon} trailingIcon={trailingIcon} fg={fg} loading={loading} size={size} />
+    </Highlight>
+  );
+}
+
+const iconVariants = (colors: Palette) =>
+  ({
+    outline: { bg: colors.card, fg: colors.ink, border: colors.line },
+    plain: { bg: 'transparent', fg: colors.ink, border: 'transparent' },
+    quiet: { bg: colors.fill, fg: colors.ink, border: colors.fill },
+    tinted: { bg: colors.accentWash, fg: colors.accentInk, border: colors.accentWash },
+    onPhoto: { bg: colors.white, fg: palettes.light.ink, border: colors.white },
+    onDark: { bg: 'rgba(255,255,255,0.14)', fg: colors.white, border: 'rgba(255,255,255,0.18)' },
+  }) as const;
+
+type IconButtonProps = {
   icon: IconName;
   label: string;
   onPress: () => void;
-  variant?: 'fill' | 'glass' | 'card' | 'tinted';
+  variant?: keyof ReturnType<typeof iconVariants>;
   size?: number;
+  selected?: boolean;
+  disabled?: boolean;
 };
 
-export function CircleButton({ icon, label, onPress, variant = 'fill', size = 30 }: CircleProps) {
-  const bg = { fill: colors.fill, glass: 'rgba(255,255,255,0.78)', card: colors.card, tinted: 'rgba(10,82,233,0.12)' }[variant];
-  const fg = { fill: colors.l2, glass: colors.l1, card: colors.l1, tinted: colors.tint }[variant];
+export function IconButton({ icon, label, onPress, variant = 'outline', size = 40, selected, disabled }: IconButtonProps) {
+  const colors = useColors();
+  const styles = useStyles();
+  const v = iconVariants(colors)[variant];
+  // Plain toggles show their state with a filled glyph in the brand colour; framed ones fill with it.
+  const inverted = Boolean(selected) && variant !== 'plain';
   return (
-    <PressableScale
-      scaleTo={0.92}
-      feedback="tap"
+    <Highlight
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
+      feedback="tap"
       hitSlop={Math.max(0, (44 - size) / 2)}
       onPress={onPress}
-      style={[styles.circle, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
-      <Icon name={icon} size={size * 0.47} color={fg} />
-    </PressableScale>
+      pressedStyle={{ opacity: 0.6 }}
+      style={[styles.iconBtn, { width: size, height: size, backgroundColor: inverted ? colors.accent : v.bg, borderColor: inverted ? colors.accent : v.border, opacity: disabled ? 0.4 : 1 }]}>
+      <Icon name={icon} size={Math.round(size * 0.45)} color={inverted ? colors.white : selected && variant === 'plain' ? colors.accent : v.fg} weight="semibold" filled={selected && variant === 'plain'} />
+    </Highlight>
   );
 }
 
-const styles = StyleSheet.create({
-  btn: { borderRadius: radius.btn, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, alignSelf: 'stretch' },
-  square: { width: 50, paddingHorizontal: 0, alignSelf: 'auto' },
+/** Quiet text action, e.g. "See all" beside a section title. */
+export function TextAction({ label, onPress, icon = 'chevronRight', color, disabled }: { label: string; onPress: () => void; icon?: IconName | null; color?: string; disabled?: boolean }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const tint = color ?? colors.accent;
+  return (
+    <Highlight accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} hitSlop={10} onPress={onPress} style={[styles.textAction, disabled && { opacity: 0.4 }]}>
+      <Txt v="subhead" w="medium" c={tint}>
+        {label}
+      </Txt>
+      {icon && <Icon name={icon} size={11} color={tint} weight="semibold" />}
+    </Highlight>
+  );
+}
+
+type ChipProps = { label: string; selected?: boolean; onPress: () => void; icon?: IconName; count?: number };
+
+/** Selectable filter. Selected chips take the brand tint; the change is the state, so it is instant. */
+export function Chip({ label, selected, onPress, icon, count }: ChipProps) {
+  const colors = useColors();
+  const styles = useStyles();
+  const fg = selected ? colors.accentInk : colors.ink;
+  return (
+    <Highlight
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={count !== undefined ? `${label}, ${count}` : label}
+      feedback="selection"
+      onPress={onPress}
+      pressedStyle={{ opacity: 0.7 }}
+      style={[styles.chip, selected ? { backgroundColor: colors.accentWash, borderColor: colors.accent } : { backgroundColor: colors.card, borderColor: colors.line }]}>
+      {icon && <Icon name={icon} size={14} color={fg} weight="semibold" />}
+      <Txt v="subhead" w="medium" c={fg} numberOfLines={1}>
+        {label}
+      </Txt>
+      {count !== undefined && (
+        <Txt v="footnote" w="medium" num c={selected ? colors.accentInk : colors.ink3}>
+          {count}
+        </Txt>
+      )}
+    </Highlight>
+  );
+}
+
+const useStyles = createStyles((colors) => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cap: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, paddingHorizontal: 14 },
-  circle: { alignItems: 'center', justifyContent: 'center' },
-});
+  hug: { alignSelf: 'flex-start' },
+  edge: { position: 'absolute', left: 0, right: 0, bottom: 0, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: colors.accentEdge },
+  face: { borderRadius: radius.sm, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  iconBtn: { borderRadius: radius.sm, borderCurve: 'continuous', borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  textAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
+  chip: { height: 36, borderRadius: radius.sm, borderCurve: 'continuous', borderWidth: 1, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+}));

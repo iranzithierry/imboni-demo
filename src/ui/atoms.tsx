@@ -1,165 +1,163 @@
-import { useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Platform, StyleSheet, Switch as NativeSwitch, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import Animated, { Easing, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import { haptic } from '@/lib/haptics';
 
 import { Icon, type IconName } from './icon';
-import { PressableScale } from './pressable';
 import { Txt } from './text';
-import { colors, gradients, radius, spring, swatch, tones, type GradientName, type Swatch, type Tone } from './theme';
+import { createStyles, hueColors, motion, palettes, radius, solidHue, statusColors, useColors, type Hue, type Palette, type Status } from './theme';
 
-const TILE = {
-  s: { box: 30, r: radius.tile, icon: 19 },
-  m: { box: 38, r: radius.tileL, icon: 22 },
-  xl: { box: 60, r: radius.tileXL, icon: 34 },
-} as const;
+const EASE = Easing.out(Easing.quad);
 
-export function Tile({ icon, color, size = 's', style }: { icon: IconName; color: Swatch; size?: keyof typeof TILE; style?: StyleProp<ViewStyle> }) {
-  const t = TILE[size];
-  return (
-    <View style={[styles.center, { width: t.box, height: t.box, borderRadius: t.r, backgroundColor: swatch[color] }, style]}>
-      <Icon name={icon} size={t.icon} color={colors.white} />
-    </View>
-  );
+export type TagTone = Status | 'outline' | 'ink' | 'onDark' | Hue;
+
+function tagColors(colors: Palette, tone: TagTone): { bg: string; fg: string; border?: string } {
+  switch (tone) {
+    case 'outline':
+      return { bg: 'transparent', fg: colors.ink, border: colors.line };
+    case 'ink':
+      return { bg: colors.ink, fg: colors.canvas };
+    case 'onDark':
+      return { bg: 'rgba(255,255,255,0.14)', fg: colors.white, border: 'rgba(255,255,255,0.16)' };
+    case 'brand':
+      return { bg: colors.accentWash, fg: colors.accentInk };
+    case 'neutral':
+    case 'ok':
+    case 'warn':
+    case 'bad':
+      return statusColors(colors, tone);
+    default:
+      return hueColors(colors, tone);
+  }
 }
 
-const INI = { s: { box: 30, font: 10 }, m: { box: 38, font: 12 }, l: { box: 64, font: 20 } } as const;
-
-export function Initials({ label, color, size = 'm', style }: { label: string; color: Swatch; size?: keyof typeof INI; style?: StyleProp<ViewStyle> }) {
-  const s = INI[size];
+/** Small label. Status tags always carry an icon so colour is never the only signal. */
+export function Tag({ label, tone = 'neutral', icon, style }: { label: string; tone?: TagTone; icon?: IconName; style?: StyleProp<ViewStyle> }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const t = tagColors(colors, tone);
   return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[styles.center, { width: s.box, height: s.box, borderRadius: s.box / 2, backgroundColor: swatch[color] }, style]}>
-      <Txt v="c1" c={colors.white} w="700" style={{ fontSize: s.font, letterSpacing: 0.3 }}>
+    <View style={[styles.tag, { backgroundColor: t.bg, borderColor: t.border ?? t.bg }, style]}>
+      {icon && <Icon name={icon} size={11} color={t.fg} weight="semibold" />}
+      <Txt v="caption" c={t.fg} numberOfLines={1}>
         {label}
       </Txt>
     </View>
   );
 }
 
-export function Badge({ label, tone = 'gray', icon, style }: { label: string; tone?: Tone; icon?: IconName; style?: StyleProp<ViewStyle> }) {
-  const t = tones[tone];
+export type TileTone = Status | 'ink' | 'onDark' | Hue;
+
+/**
+ * Rounded square holding an icon. Feature tiles take their feature's hue; `solid` fills the tile with the
+ * hue and draws the glyph in white, as settings lists do.
+ */
+export function IconTile({ icon, tone = 'neutral', size = 36, solid, style }: { icon: IconName; tone?: TileTone; size?: number; solid?: boolean; style?: StyleProp<ViewStyle> }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const c =
+    tone === 'ink'
+      ? { bg: colors.ink, fg: colors.canvas }
+      : tone === 'onDark'
+        ? { bg: 'rgba(255,255,255,0.14)', fg: colors.white }
+        : tone === 'neutral' || tone === 'ok' || tone === 'warn' || tone === 'bad'
+          ? tone === 'neutral'
+            ? { bg: colors.fill, fg: colors.ink }
+            : statusColors(colors, tone)
+          : hueColors(colors, tone);
+  // Solid tiles mark a feature in its own hue; the light scheme's tone keeps the white glyph legible in dark mode.
+  const filled = solid && tone !== 'neutral' && tone !== 'ink' && tone !== 'onDark';
+  const solidBg = tone === 'ok' || tone === 'warn' || tone === 'bad' ? statusColors(palettes.light, tone).fg : tone === 'neutral' || tone === 'ink' || tone === 'onDark' ? palettes.light.ink3 : solidHue(tone);
   return (
-    <View style={[styles.badge, { backgroundColor: t.bg }, style]}>
-      {icon && <Icon name={icon} size={11} color={t.fg} />}
-      <Txt v="c1" c={t.fg} w="600" numberOfLines={1}>
-        {label}
-      </Txt>
+    <View style={[styles.center, { width: size, height: size, borderRadius: size >= 48 ? radius.md : radius.sm, borderCurve: 'continuous', backgroundColor: filled ? solidBg : c.bg }, style]}>
+      <Icon name={icon} size={Math.round(size * 0.5)} color={filled ? colors.white : c.fg} weight={filled ? 'semibold' : 'medium'} />
     </View>
   );
 }
 
-/** Badge on a coloured hero surface. */
-export function GlassBadge({ label, icon }: { label: string; icon?: IconName }) {
-  return (
-    <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
-      {icon && <Icon name={icon} size={11} color={colors.white} />}
-      <Txt v="c1" c={colors.white} w="600">
-        {label}
-      </Txt>
-    </View>
-  );
+type CardProps = { children: ReactNode; style?: StyleProp<ViewStyle>; radiusSize?: 'lg' | 'xl'; padded?: boolean };
+
+export function Card({ children, style, radiusSize = 'xl', padded = true }: CardProps) {
+  const styles = useStyles();
+  return <View style={[styles.card, { borderRadius: radius[radiusSize] }, padded && { padding: 16 }, style]}>{children}</View>;
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+export function Divider({ inset = 0, color, style }: { inset?: number; color?: string; style?: StyleProp<ViewStyle> }) {
+  const colors = useColors();
+  return <View style={[{ height: StyleSheet.hairlineWidth * 2, marginLeft: inset, backgroundColor: color ?? colors.line }, style]} />;
 }
 
-export function DateBadge({ month, day }: { month: string; day: string }) {
-  return (
-    <View style={styles.date} accessibilityLabel={`${day} ${month}`}>
-      <View style={styles.dateHead}>
-        <Txt v="c2" c={colors.white} w="600" center style={{ lineHeight: 14 }}>
-          {month}
-        </Txt>
-      </View>
-      <Txt num center style={{ fontSize: 19, lineHeight: 27, fontWeight: '600' }}>
-        {day}
-      </Txt>
-    </View>
-  );
+export function Skeleton({ width, height, r = radius.xs, style }: { width: number | `${number}%`; height: number; r?: number; style?: StyleProp<ViewStyle> }) {
+  const colors = useColors();
+  return <View style={[{ width, height, borderRadius: r, backgroundColor: colors.fill }, style]} />;
 }
 
-export function Radio({ on, color = colors.tint, size = 22 }: { on: boolean; color?: string; size?: number }) {
+/** Square checkbox in the brand colour. The fill eases in: it is the state change. */
+export function Checkbox({ on, size = 24, tone = 'brand' }: { on: boolean; size?: number; tone?: 'brand' | 'ok' }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const fill = tone === 'ok' ? colors.ok : colors.accent;
+  const idle = colors.card;
+  const edge = colors.pearl;
   const animated = useAnimatedStyle(() => ({
-    transform: [{ scale: withSpring(on ? 1 : 0.92, spring) }],
-    backgroundColor: withTiming(on ? color : 'transparent', { duration: 200 }),
-    borderColor: withTiming(on ? color : colors.l3, { duration: 200 }),
+    backgroundColor: withTiming(on ? fill : idle, { duration: motion.fast, easing: EASE }),
+    borderColor: withTiming(on ? fill : edge, { duration: motion.fast, easing: EASE }),
   }));
   return (
-    <Animated.View style={[styles.center, { width: size, height: size, borderRadius: size / 2, borderWidth: 1.5 }, animated]}>
-      {on && <Icon name="check" size={size * 0.55} color={colors.white} />}
+    <Animated.View style={[styles.center, { width: size, height: size, borderRadius: radius.sm, borderWidth: 1.5 }, animated]}>
+      {on && <Icon name="check" size={size * 0.55} color={colors.white} weight="semibold" />}
     </Animated.View>
   );
 }
 
-export function Switch({ value, onChange, label, activeColor = colors.green }: { value: boolean; onChange: (next: boolean) => void; label: string; activeColor?: string }) {
+export function Radio({ on, size = 22 }: { on: boolean; size?: number }) {
+  const colors = useColors();
+  const styles = useStyles();
+  return <View style={[styles.center, { width: size, height: size, borderRadius: size / 2, borderWidth: on ? size * 0.3 : 1.5, borderColor: on ? colors.accent : colors.pearl, backgroundColor: colors.card }]} />;
+}
+
+export function Switch({ value, onChange, label, disabled }: { value: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
+  const colors = useColors();
   return (
     <NativeSwitch
       accessibilityLabel={label}
       value={value}
+      disabled={disabled}
       onValueChange={(next) => {
         haptic.selection();
         onChange(next);
       }}
-      trackColor={{ true: activeColor, false: Platform.OS === 'ios' ? undefined : colors.fill }}
-      ios_backgroundColor="rgba(120,120,128,0.16)"
+      trackColor={{ true: colors.accent, false: Platform.OS === 'ios' ? undefined : colors.line }}
+      // react-native-web otherwise paints the thumb in Material teal.
+      thumbColor={Platform.OS === 'ios' ? undefined : colors.white}
+      ios_backgroundColor={colors.line}
     />
   );
 }
 
-export function Pill({ label, on, onPress, icon, filled }: { label: string; on: boolean; onPress: () => void; icon?: IconName; filled?: boolean }) {
-  const fg = on ? colors.white : colors.l1;
+/** Thin bar for windows and progress; it eases to a new value when the value changes. */
+export function Bar({ value, color, track, height = 6 }: { value: number; color?: string; track?: string; height?: number }) {
+  const colors = useColors();
+  const clamped = Math.max(0, Math.min(1, value));
+  const animated = useAnimatedStyle(() => ({ width: withTiming(`${clamped * 100}%`, { duration: motion.slow, easing: EASE }) }));
   return (
-    <PressableScale
-      scaleTo={0.95}
-      feedback="selection"
-      accessibilityRole="button"
-      accessibilityState={{ selected: on }}
-      onPress={onPress}
-      style={[styles.pill, { backgroundColor: on ? colors.l1 : filled ? colors.fill : colors.card }]}>
-      {icon && <Icon name={icon} size={13} color={fg} />}
-      <Txt v="sh" c={fg} w="500">
-        {label}
-      </Txt>
-    </PressableScale>
+    <View style={{ height, borderRadius: radius.xs, backgroundColor: track ?? colors.fill, overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}>
+      <Animated.View style={[{ height, borderRadius: radius.xs, backgroundColor: color ?? colors.accent }, animated]} />
+    </View>
   );
 }
 
-/** Two-stop linear gradient fill; place as the first child of a clipped container. */
-export function Gradient({ name, angle = 'diagonal' }: { name: GradientName; angle?: 'diagonal' | 'vertical' }) {
-  const id = useId();
-  const [from, to] = gradients[name];
-  return (
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} preserveAspectRatio="none">
-      <Defs>
-        <LinearGradient id={id} x1="0" y1="0" x2={angle === 'diagonal' ? '1' : '0'} y2="1">
-          <Stop offset="0" stopColor={from} />
-          <Stop offset="1" stopColor={to} />
-        </LinearGradient>
-      </Defs>
-      <Rect width="100%" height="100%" fill={`url(#${id})`} />
-    </Svg>
-  );
+/** Unread marker in the brand colour. */
+export function Dot({ color, size = 8 }: { color?: string; size?: number }) {
+  const colors = useColors();
+  return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color ?? colors.accent }} />;
 }
 
-export function Hairline({ inset = 0, color = colors.sep }: { inset?: number; color?: string }) {
-  return <View style={{ height: StyleSheet.hairlineWidth, marginLeft: inset, backgroundColor: color }} />;
-}
-
-export function Skeleton({ width, height, radius: r = 6 }: { width: number | `${number}%`; height: number; radius?: number }) {
-  return <View style={{ width, height, borderRadius: r, backgroundColor: colors.track }} />;
-}
-
-const styles = StyleSheet.create({
-  center: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  badge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, height: 22, paddingHorizontal: 8, borderRadius: 11 },
-  card: { backgroundColor: colors.card, borderRadius: radius.card, marginHorizontal: 16, overflow: 'hidden' },
-  date: { width: 40, height: 42, borderRadius: 8, overflow: 'hidden', backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.15)' },
-  dateHead: { height: 14, backgroundColor: colors.red, justifyContent: 'center' },
-  pill: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 6 },
-});
+const useStyles = createStyles((colors) =>
+  StyleSheet.create({
+    center: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    tag: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, height: 22, paddingHorizontal: 7, borderRadius: radius.xs, borderWidth: 1 },
+    card: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, borderCurve: 'continuous', overflow: 'hidden' },
+  }),
+);

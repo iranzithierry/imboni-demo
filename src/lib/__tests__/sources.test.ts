@@ -13,8 +13,8 @@ describe('suggestSources', () => {
     expect(groups.map((g) => g.reason)).toEqual(['Because you live in Belgium', 'Because you are a parent', 'For everyone']);
     expect(groups.map((g) => g.institutions.map((i) => i.mono))).toEqual([
       ['EMB', 'NIDA', 'MFA'],
-      ['NESA', 'MIN', 'RBC'],
-      ['BNR', 'MET', 'RNP'],
+      ['NESA', 'MIN', 'RSSB'],
+      ['BNR', 'RNP', 'MET'],
     ]);
   });
 

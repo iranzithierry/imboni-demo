@@ -1,132 +1,138 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import { useLocalSearchParams } from 'expo-router';
+import { Platform, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HOME_TIME_ZONE } from '@/config/constants';
 import { useApi } from '@/data/api';
 import { q } from '@/data/queries';
 import { useNow } from '@/features/data';
-import { provenanceLabel } from '@/features/labels';
-import { ADVISORY_STYLE, AdvisoryMap } from '@/features/map/advisory-map';
+import { advisoryStatusLabel } from '@/features/labels';
+import { AdvisoryMap } from '@/features/map/advisory-map';
 import { advisoryWhen } from '@/features/map/format';
-import { formatTime } from '@/lib/dates';
+import { AsOf, ProvenanceLabel } from '@/features/record/parts';
 import { haptic } from '@/lib/haptics';
 import { shareText } from '@/lib/share';
 import { usePrefs } from '@/state/prefs';
-import { Badge, Card, Tile } from '@/ui/atoms';
-import { CircleButton } from '@/ui/button';
-import { Icon, type IconName } from '@/ui/icon';
-import { Cell, Group, GroupHeader, INSET } from '@/ui/list';
-import { PressableScale } from '@/ui/pressable';
-import { Screen, useScrollY } from '@/ui/nav';
+import { IconTile, Tag } from '@/ui/atoms';
+import { Button } from '@/ui/button';
+import { Group, GroupLabel, INSET, Row } from '@/ui/list';
+import { HeaderActions, useHeroTitle, useScrollY } from '@/ui/nav';
 import { ErrorScreen } from '@/ui/states';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, GUTTER, radius, useColors } from '@/ui/theme';
 
-const MAP_H = 320;
-
-function Action({ icon, label, onPress, on }: { icon: IconName; label: string; onPress: () => void; on?: boolean }) {
-  return (
-    <PressableScale feedback="tap" accessibilityRole="button" accessibilityState={on === undefined ? undefined : { selected: on }} onPress={onPress} style={[styles.action, on && { backgroundColor: colors.tint }]}>
-      <Icon name={icon} size={17} color={on ? colors.white : colors.tint} />
-      <Txt v="c1" w="600" c={on ? colors.white : colors.tint}>
-        {label}
-      </Txt>
-    </PressableScale>
-  );
-}
+const MAP_H = 300;
 
 export default function AdvisoryScreen() {
+  const colors = useColors();
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const roads = useQuery(q.roads(useApi()));
   const now = useNow();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const top = useSafeAreaInsets().top;
   const { scrollY, onScroll } = useScrollY();
   const alerting = usePrefs((s) => s.advisoryAlerts[id] ?? false);
-  const set = usePrefs((s) => s.set);
   const all = usePrefs((s) => s.advisoryAlerts);
-  // Map parallax: it drifts up slower than the sheet that slides over it.
-  const mapStyle = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(scrollY.get(), [-100, 0, MAP_H], [40, 0, -MAP_H / 3]) }] }));
+  const set = usePrefs((s) => s.set);
   const a = roads.data?.advisories.find((x) => x.id === id);
-  if (!roads.data || !a) return <Screen>{roads.isPending ? null : <ErrorScreen error={roads.error ?? new Error('not_found')} onRetry={() => roads.refetch()} />}</Screen>;
-  const s = ADVISORY_STYLE[a.status];
-  const prov = provenanceLabel(a.provenance);
+  useHeroTitle(scrollY, MAP_H - top - 40, a?.road ?? '');
+  if (!roads.data || !a) return roads.isPending ? null : <ErrorScreen error={roads.error ?? new Error('not_found')} onRetry={() => roads.refetch()} />;
+  const label = advisoryStatusLabel(a.status);
+  const stale = now.getTime() - new Date(a.asOf).getTime() > 60 * 60_000;
   const directions = () => {
     const { latitude, longitude } = a.marker;
-    Linking.openURL(Platform.OS === 'ios' ? `maps://?daddr=${latitude},${longitude}` : `geo:${latitude},${longitude}?q=${encodeURIComponent(a.road)}`).catch(() => undefined);
+    Linking.openURL(Platform.OS === 'ios' ? `maps://?daddr=${latitude},${longitude}` : Platform.OS === 'android' ? `geo:${latitude},${longitude}?q=${encodeURIComponent(a.road)}` : `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`).catch(() => undefined);
   };
 
   return (
-    <Screen>
-      <Animated.View style={[styles.map, { width }, mapStyle]} pointerEvents="none">
-        <AdvisoryMap roads={roads.data} visible={[a]} selectedId={a.id} interactive={false} />
-      </Animated.View>
-      <View style={[styles.back, { top: insets.top + 6 }]}>
-        <CircleButton icon="chevronLeft" label="Back" variant="glass" size={40} onPress={() => router.back()} />
-      </View>
-      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={{ paddingTop: MAP_H - 20, paddingBottom: insets.bottom + 40 }}>
-        <View style={styles.sheet}>
-          <View style={styles.grab} />
-          <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-            <View style={styles.between}>
-              <Badge label={a.status === 'closed' ? 'Closed' : a.status === 'partial' ? 'One lane' : 'Upcoming'} tone={a.status === 'closed' ? 'red' : a.status === 'partial' ? 'orange' : 'gray'} icon={s.icon} />
-              <Txt v="fn" c={colors.l2} num>{`As of ${formatTime(a.asOf)}`}</Txt>
+    <>
+      <HeaderActions actions={[{ icon: 'share', label: 'Share', onPress: () => shareText(a.headline, { kind: 'advisory', id: a.id }).catch(() => undefined) }]} />
+      <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} contentInsetAdjustmentBehavior="never" contentContainerStyle={{ paddingBottom: 48 }}>
+        <View style={{ height: MAP_H }} pointerEvents="none">
+          <AdvisoryMap roads={roads.data} visible={[a]} selectedId={a.id} interactive={false} />
+        </View>
+        <View style={styles.head}>
+          <View style={styles.between}>
+            <Tag label={label.label} tone={label.tone} icon={label.icon} />
+            <AsOf iso={a.asOf} stale={stale} />
+          </View>
+          <Txt v="title1" style={{ marginTop: 14 }} accessibilityRole="header">
+            {a.headline}
+          </Txt>
+          <Txt v="subhead" c={colors.ink2} style={{ marginTop: 6 }}>{`${a.issuer} · ${a.area} · ${a.reason}`}</Txt>
+          <View style={styles.when}>
+            <IconTile icon="clock" size={40} tone="amber" />
+            <View style={{ flex: 1 }}>
+              <Txt v="caption" c={colors.ink3}>
+                When
+              </Txt>
+              <Txt v="title3" num>
+                {advisoryWhen(a, now, HOME_TIME_ZONE)}
+              </Txt>
             </View>
-            <Txt v="t2" style={{ marginTop: 8 }} accessibilityRole="header">
-              {a.headline}
-            </Txt>
-            <Txt v="sh" c={colors.l2}>{`${a.issuer} · road advisory`}</Txt>
-            <Txt v="t1" num style={{ marginTop: 10 }}>
-              {advisoryWhen(a, now, HOME_TIME_ZONE)}
-            </Txt>
           </View>
           <View style={styles.actions}>
-            <Action icon="bell" label={alerting ? 'Alerting' : 'Alert me'} on={alerting} onPress={() => { haptic.selection(); set('advisoryAlerts', { ...all, [a.id]: !alerting }); }} />
-            <Action icon="location" label="Directions" onPress={directions} />
-            <Action icon="share" label="Share" onPress={() => shareText(a.headline, { kind: 'advisory', id: a.id }).catch(() => undefined)} />
+            <View style={{ flex: 1 }}>
+              <Button
+                label={alerting ? 'Alerting you' : 'Alert me'}
+                icon={alerting ? 'check' : 'bell'}
+                variant={alerting ? 'tinted' : 'secondary'}
+                size="md"
+                onPress={() => {
+                  haptic.selection();
+                  set('advisoryAlerts', { ...all, [a.id]: !alerting });
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Directions" icon="location" variant="secondary" size="md" onPress={directions} />
+            </View>
           </View>
-          {a.onRoute && a.routeOverlap && (
-            <Card style={styles.route}>
-              <Tile icon="car" color="orange" size="m" />
-              <View style={{ flex: 1 }}>
-                <Txt v="hl">On your route</Txt>
-                <Txt v="fn" c={colors.l2} num>
-                  {a.routeOverlap}
-                </Txt>
-              </View>
-            </Card>
-          )}
-          {a.steps.length > 0 && (
-            <>
-              <GroupHeader>Diversion</GroupHeader>
-              <Group inset={INSET.tile}>
-                {a.steps.map((st) => (
-                  <Cell key={st.title} left={<Tile icon={st.icon} color="tint" />} title={st.title} subtitle={st.detail} />
-                ))}
-              </Group>
-            </>
-          )}
-          <GroupHeader>Source</GroupHeader>
-          <Group inset={INSET.tile}>
-            <Cell left={<Tile icon={prov.icon} color={prov.tone === 'green' ? 'green' : 'gray'} />} title={prov.label} subtitle={a.sourceLabel} />
-          </Group>
+        </View>
+
+        {a.onRoute && a.routeOverlap && (
+          <View style={styles.route}>
+            <IconTile icon="car" tone="warn" size={40} />
+            <View style={{ flex: 1 }}>
+              <Txt v="callout" w="semibold">{`On your route: ${roads.data.route.label}`}</Txt>
+              <Txt v="footnote" c={colors.ink2} num>
+                {a.routeOverlap}
+              </Txt>
+            </View>
+          </View>
+        )}
+
+        {a.steps.length > 0 && (
+          <>
+            <GroupLabel>Signed diversion</GroupLabel>
+            <Group inset={INSET.tile}>
+              {a.steps.map((st) => (
+                <Row key={st.title} left={<IconTile icon={st.icon} tone="amber" />} title={st.title} subtitle={st.detail} />
+              ))}
+            </Group>
+          </>
+        )}
+
+        <GroupLabel>Source</GroupLabel>
+        <Group>
+          <Row title={a.sourceLabel} subtitle="Hours and the closed stretch are checked against the post" />
+        </Group>
+        <View style={styles.provenance}>
+          <ProvenanceLabel provenance={a.provenance} institution={a.issuer} source={a.sourceLabel} at={a.asOf} />
         </View>
       </Animated.ScrollView>
-    </Screen>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  map: { position: 'absolute', top: 0, left: 0, height: MAP_H + 60 },
-  back: { position: 'absolute', left: 16, zIndex: 10 },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 14, borderTopRightRadius: 14, minHeight: 700, boxShadow: '0 -6px 24px rgba(0,0,0,0.1)' },
-  grab: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.l3, alignSelf: 'center', marginTop: 6 },
+const useStyles = createStyles((colors) => StyleSheet.create({
+  head: { paddingHorizontal: GUTTER, paddingTop: 20 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
-  action: { flex: 1, height: 56, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  route: { marginTop: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
-});
+  when: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 18, padding: 14, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  route: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: GUTTER, marginTop: 12, padding: 14, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: colors.warnWash },
+  provenance: { paddingHorizontal: GUTTER + 4, paddingTop: 12 },
+}));

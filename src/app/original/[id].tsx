@@ -1,160 +1,182 @@
 import { useQuery } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import * as WebBrowser from 'expo-web-browser';
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
 import { useApi } from '@/data/api';
 import { q } from '@/data/queries';
 import { useInstitutionLookup } from '@/features/data';
-import { provenanceLabel } from '@/features/labels';
+import { ProvenanceLabel } from '@/features/record/parts';
 import { formatDate, formatTime } from '@/lib/dates';
 import { haptic } from '@/lib/haptics';
-import { Badge, Card, Initials, Tile } from '@/ui/atoms';
+import { IconTile, Tag } from '@/ui/atoms';
 import { Button } from '@/ui/button';
-import { Cell, Group, INSET } from '@/ui/list';
-import { NavButton } from '@/ui/nav';
+import { Group, INSET, Row } from '@/ui/list';
+import { InstitutionLogo } from '@/ui/logo';
+import { closeAction, HeaderActions } from '@/ui/nav';
+import { Highlight } from '@/ui/pressable';
 import { Segmented } from '@/ui/segmented';
 import { DetentSheet } from '@/ui/sheet';
 import { ErrorScreen } from '@/ui/states';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, GUTTER, motion, radius, useColors } from '@/ui/theme';
 
-const TABS = [
-  { value: 'letter', label: 'Letter' },
-  { value: 'post', label: 'Post' },
-  { value: 'history', label: 'History' },
-] as const;
-const serif = { fontFamily: 'Georgia' } as const;
-
-function Lines({ widths }: { widths: number[] }) {
-  return (
-    <>
-      {widths.map((w, i) => (
-        <View key={i} style={{ height: 6, width: `${w}%`, backgroundColor: colors.track, borderRadius: 2 }} />
-      ))}
-    </>
-  );
-}
+type Tab = 'letter' | 'post' | 'history';
 
 export default function OriginalScreen() {
+  const colors = useColors();
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const query = useQuery(q.original(useApi(), id));
   const inst = useInstitutionLookup();
   const { height } = useWindowDimensions();
+  const headerHeight = useHeaderHeight();
   const letter = useRef<ScrollViewInstance>(null);
   const offsets = useRef<Record<string, number>>({});
-  const [tab, setTab] = useState<(typeof TABS)[number]['value']>('letter');
+  const [tab, setTab] = useState<Tab>('letter');
   const [field, setField] = useState<string | null>(null);
   const [detent, setDetent] = useState(1);
   const o = query.data;
-  if (!o) return <View style={{ flex: 1, backgroundColor: colors.bg }}>{query.isPending ? null : <ErrorScreen error={query.error} onRetry={() => query.refetch()} />}</View>;
+  const header = (
+    <>
+      <Stack.Screen options={{ title: 'Original' }} />
+      <HeaderActions actions={[closeAction]} />
+    </>
+  );
+  if (!o)
+    return (
+      <View style={styles.screen}>
+        {header}
+        {query.isPending ? null : <ErrorScreen error={query.error} onRetry={() => query.refetch()} />}
+      </View>
+    );
   const selected = field ?? o.fields[0]?.id ?? null;
-  const prov = provenanceLabel(o.provenance);
-  const mono = inst(o.institutionId).mono;
+  const issuer = inst(o.institutionId);
+  // The tab switcher sits outside the scroll views, so where the header floats over the screen (iOS) it has to clear it by hand.
+  const top = Platform.OS === 'ios' ? headerHeight : 0;
 
   const pick = (fid: string) => {
     haptic.selection();
     setField(fid);
     const y = offsets.current[fid];
-    if (y !== undefined) letter.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
-  };
-  const excerpt = (fid: string) => {
-    const f = o.fields.find((x) => x.id === fid);
-    if (!f) return null;
-    const on = selected === fid;
-    return (
-      <Pressable
-        key={fid}
-        accessibilityRole="button"
-        accessibilityLabel={`${f.label}: ${f.value}`}
-        onLayout={(e) => {
-          offsets.current[fid] = e.nativeEvent.layout.y;
-        }}
-        onPress={() => pick(fid)}
-        style={[styles.mark, { backgroundColor: on ? colors.highlight : colors.highlightDim }]}>
-        <Txt style={[serif, { fontSize: 12, lineHeight: 17 }]}>{f.excerpt}</Txt>
-      </Pressable>
-    );
+    if (y !== undefined) letter.current?.scrollTo({ y: Math.max(0, y - 60), animated: true });
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <NavButton label="Done" bold onPress={() => router.back()} />
-          <Txt v="hl" accessibilityRole="header">
-            Original
-          </Txt>
-          <NavButton label="Report" icon="flag" onPress={() => router.push({ pathname: '/report/[id]', params: { id: o.id, field: 'Whole item' } })} />
-        </View>
-        <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-          <Segmented accessibilityLabel="Original view" options={TABS} value={tab} onChange={setTab} />
-        </View>
+    <View style={[styles.screen, { paddingTop: top }]}>
+      {header}
+      <HeaderActions placement="left" actions={[{ icon: 'flag', text: 'Report', label: 'Report a problem', onPress: () => router.push({ pathname: '/report/[id]', params: { id: o.id, field: 'Whole item' } }) }]} />
+      <View style={styles.tabs}>
+        <Segmented
+          accessibilityLabel="Original view"
+          options={[
+            { value: 'letter', label: o.kind === 'letter' ? 'Letter' : 'Document' },
+            { value: 'post', label: 'Post' },
+            { value: 'history', label: 'History' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
       </View>
 
       {tab === 'letter' && (
-        <Animated.View entering={FadeIn} style={{ flex: 1 }}>
-          <ScrollView ref={letter} maximumZoomScale={3} minimumZoomScale={1} centerContent style={{ backgroundColor: '#D8D8DD' }} contentContainerStyle={{ paddingVertical: 18, paddingBottom: height * 0.4 }}>
-            <View style={styles.paper} accessibilityLabel={`Letter from ${inst(o.institutionId).name}, ${o.dated}. Pinch to zoom.`}>
-              <View style={styles.between}>
-                <Initials label={mono} color={inst(o.institutionId).color} size="s" />
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Txt style={[serif, { fontSize: 11, lineHeight: 15 }]}>{o.reference}</Txt>
-                  <Txt style={[serif, { fontSize: 11, lineHeight: 15 }]}>{o.dated}</Txt>
+        <Animated.View entering={FadeIn.duration(motion.fast)} style={{ flex: 1 }}>
+          <ScrollView ref={letter} maximumZoomScale={3} minimumZoomScale={1} contentContainerStyle={{ paddingVertical: 16, paddingBottom: height * 0.42 }}>
+            <View style={styles.paper} accessibilityLabel={`Text read from the letter by ${issuer.name}, ${o.dated}. Pinch to zoom.`}>
+              <View style={styles.letterhead}>
+                <InstitutionLogo id={issuer.id} label={issuer.mono} size="s" />
+                <View style={{ flex: 1 }}>
+                  <Txt v="caption" w="medium">
+                    {issuer.name}
+                  </Txt>
+                  <Txt v="caption" c={colors.ink2} num>{`${o.reference} · ${o.dated}`}</Txt>
                 </View>
               </View>
-              <View style={{ height: 9, width: '55%', backgroundColor: '#D1D1D6', borderRadius: 2, marginTop: 10 }} />
-              <Lines widths={[100, 93]} />
-              {excerpt('bank-deadline')}
-              <Lines widths={[88, 96]} />
-              {excerpt('bnr-only-ends')}
-              <Lines widths={[70, 82]} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Signature"
-                onLayout={(e) => {
-                  offsets.current['signed-by'] = e.nativeEvent.layout.y;
-                }}
-                onPress={() => pick('signed-by')}
-                style={[styles.sign, { backgroundColor: selected === 'signed-by' ? colors.highlight : colors.highlightDim }]}>
-                <Svg viewBox="0 0 90 28" width={90} height={28}>
-                  <Path d="M4 20c10-14 16 6 24-4s10-10 18 0 14 4 20-6 10 2 20 4" fill="none" stroke="#1C2E6B" strokeWidth={1.6} />
-                </Svg>
-                <Txt style={[serif, { fontSize: 11, fontWeight: '700' }]}>Governor</Txt>
-              </Pressable>
+              <Txt v="callout" w="medium" style={{ marginTop: 18 }}>
+                {o.heading}
+              </Txt>
+              {o.passages.map((p, i) => {
+                const fid = p.fieldId;
+                if (!fid) {
+                  return (
+                    <Txt key={i} v="subhead" style={styles.passage}>
+                      {p.text}
+                    </Txt>
+                  );
+                }
+                const on = selected === fid;
+                return (
+                  <Highlight
+                    key={i}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    onLayout={(e) => {
+                      offsets.current[fid] = e.nativeEvent.layout.y;
+                    }}
+                    onPress={() => pick(fid)}
+                    style={[styles.mark, on && styles.markOn]}>
+                    <Txt v="subhead">{p.text}</Txt>
+                  </Highlight>
+                );
+              })}
+              {o.signatory && (
+                <Highlight
+                  accessibilityRole="button"
+                  accessibilityLabel={`Signed by the ${o.signatory}`}
+                  onLayout={(e) => {
+                    offsets.current['signed-by'] = e.nativeEvent.layout.y;
+                  }}
+                  onPress={() => pick('signed-by')}
+                  style={[styles.sign, selected === 'signed-by' && styles.markOn]}>
+                  <Svg viewBox="0 0 90 28" width={96} height={30}>
+                    <Path d="M4 20c10-14 16 6 24-4s10-10 18 0 14 4 20-6 10 2 20 4" fill="none" stroke={colors.ink} strokeWidth={1.6} />
+                  </Svg>
+                  <Txt v="caption" w="medium">
+                    {o.signatory}
+                  </Txt>
+                </Highlight>
+              )}
             </View>
+            <Txt v="caption" c={colors.ink3} center style={{ marginTop: 10 }}>
+              Text read from the photo of the letter · highlighted where each field came from
+            </Txt>
           </ScrollView>
           <DetentSheet
-            detents={[120, 300]}
+            detents={[112, 300]}
             index={detent}
             onIndexChange={setDetent}
             header={
               <View style={styles.sheetHead}>
-                <Txt v="hl">Fields from this letter</Txt>
-                <Badge label={prov.label} tone={prov.tone} icon={prov.icon} />
+                <Txt v="callout" w="semibold">
+                  Fields from this letter
+                </Txt>
+                <ProvenanceLabel provenance={o.provenance} institution={issuer.name} />
               </View>
             }>
             <ScrollView>
               {o.fields.map((f, i) => {
                 const on = selected === f.id;
                 return (
-                  <Pressable key={f.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => pick(f.id)} style={[styles.field, { backgroundColor: on ? colors.bg : colors.card }]}>
-                    <View style={[styles.n, { backgroundColor: on ? colors.yellow : '#C7C7CC' }]}>
-                      <Txt v="fn" w="700" c={colors.white} num>
+                  <Highlight key={f.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => pick(f.id)} style={[styles.field, on && { backgroundColor: colors.canvas }]}>
+                    <View style={[styles.n, on && styles.nOn]}>
+                      <Txt v="footnote" w="medium" c={on ? colors.white : colors.ink} num>
                         {i + 1}
                       </Txt>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Txt v="fn" c={colors.l2}>
+                      <Txt v="footnote" c={colors.ink2}>
                         {f.label}
                       </Txt>
-                      <Txt num>{f.value}</Txt>
+                      <Txt v="callout" w="semibold" num>
+                        {f.value}
+                      </Txt>
                     </View>
-                    <Badge label={f.matchedOn} tone="green" icon="check" />
-                  </Pressable>
+                    <Tag label={`Matches ${f.matchedOn.toLowerCase()}`} tone="ok" icon="check" />
+                  </Highlight>
                 );
               })}
             </ScrollView>
@@ -163,57 +185,67 @@ export default function OriginalScreen() {
       )}
 
       {tab === 'post' && (
-        <Animated.ScrollView entering={FadeIn} contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}>
-          <Card style={{ padding: 16 }}>
-            <View style={styles.row}>
-              <Initials label={mono} color={inst(o.institutionId).color} />
+        <Animated.ScrollView entering={FadeIn.duration(motion.fast)} contentContainerStyle={{ paddingTop: 16, paddingBottom: 48 }}>
+          <View style={styles.post}>
+            <View style={styles.letterhead}>
+              <InstitutionLogo id={issuer.id} label={issuer.mono} />
               <View style={{ flex: 1 }}>
-                <Txt v="hl">{o.post.author}</Txt>
-                <Txt v="fn" c={colors.l2} num>{`${o.post.handle} · ${formatDate.long(o.post.postedAt.slice(0, 10))}, ${formatTime(o.post.postedAt, 'Africa/Kigali')}`}</Txt>
+                <Txt v="callout" w="semibold">
+                  {o.post.author}
+                </Txt>
+                <Txt v="footnote" c={colors.ink2} num>{`${o.post.handle} · ${formatDate.long(o.post.postedAt.slice(0, 10))}, ${formatTime(o.post.postedAt, 'Africa/Kigali')}`}</Txt>
               </View>
             </View>
-            <Txt v="co" style={{ marginTop: 12 }}>
+            <Txt v="body" style={{ marginTop: 12 }}>
               {o.post.text}
             </Txt>
             <View style={styles.attachment}>
               <View style={styles.miniPaper}>
-                <Lines widths={[60, 100, 100, 80]} />
+                {[60, 100, 92, 100, 74, 88].map((w, i) => (
+                  <View key={i} style={{ height: 5, width: `${w}%`, borderRadius: radius.xs, backgroundColor: i === 2 ? colors.accentWash : colors.fill }} />
+                ))}
               </View>
             </View>
-            <Txt v="fn" c={colors.l2} style={{ marginTop: 12 }}>
-              {o.post.edited ? 'Edited once · shown live from the source' : 'Shown live from the source'}
+            <Txt v="footnote" c={colors.ink2} style={{ marginTop: 12 }}>
+              {o.post.edited ? 'Edited once, wording only · shown live from the source' : 'Shown live from the source'}
             </Txt>
-          </Card>
-          <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
-            <Button label="Open source" icon="turnRight" variant="tinted" onPress={() => WebBrowser.openBrowserAsync(o.post.url).catch(() => undefined)} />
+          </View>
+          <View style={{ paddingHorizontal: GUTTER, marginTop: 14 }}>
+            <Button label="Open on the source" icon="external" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(o.post.url).catch(() => undefined)} />
           </View>
         </Animated.ScrollView>
       )}
 
       {tab === 'history' && (
-        <Animated.ScrollView entering={FadeIn} contentContainerStyle={{ paddingTop: 16 }}>
+        <Animated.ScrollView entering={FadeIn.duration(motion.fast)} contentContainerStyle={{ paddingTop: 16, paddingBottom: 48 }}>
           <Group inset={INSET.tile}>
             {o.history.map((h) => (
-              <Cell key={h.title} left={<Tile icon={h.icon} color={h.color} />} title={h.title} subtitle={h.detail} right={<Txt v="fn" c={colors.l2} num>{h.time}</Txt>} />
+              <Row key={h.title} left={<IconTile icon={h.icon} tone={h.icon === 'shield' ? 'ok' : 'neutral'} />} title={h.title} subtitle={h.detail} right={<Txt v="footnote" c={colors.ink2} num>{h.time}</Txt>} />
             ))}
           </Group>
+          <Txt v="footnote" c={colors.ink3} style={{ paddingHorizontal: GUTTER + 4, paddingTop: 10 }}>
+            Wording-only edits never reach you. Changes to dates, amounts, places or rules go back through review and arrive as a before and after.
+          </Txt>
         </Animated.ScrollView>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  header: { backgroundColor: 'rgba(249,249,249,0.96)', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.sep, zIndex: 2 },
-  headerRow: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingTop: 6 },
-  paper: { marginHorizontal: 22, backgroundColor: colors.white, borderRadius: 3, padding: 20, gap: 9, boxShadow: '0 6px 24px rgba(0,0,0,0.18)' },
-  between: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  mark: { paddingVertical: 3, paddingHorizontal: 5, borderRadius: 4 },
-  sign: { alignSelf: 'flex-end', alignItems: 'flex-end', marginTop: 12, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 4 },
-  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 11, paddingHorizontal: 16 },
-  n: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  attachment: { marginTop: 12, height: 180, borderRadius: 14, backgroundColor: '#D8D8DD', alignItems: 'center', justifyContent: 'center' },
-  miniPaper: { width: 110, height: 150, backgroundColor: colors.white, borderRadius: 2, padding: 10, gap: 5 },
-});
+const useStyles = createStyles((colors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  tabs: { paddingHorizontal: GUTTER, paddingBottom: 6 },
+  paper: { marginHorizontal: GUTTER, padding: 20, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, gap: 2 },
+  letterhead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  passage: { marginTop: 10 },
+  mark: { marginTop: 10, marginHorizontal: -6, paddingHorizontal: 6, paddingVertical: 4, borderRadius: radius.xs, backgroundColor: colors.accentWash },
+  markOn: { borderWidth: 1.5, borderColor: colors.accent },
+  sign: { alignSelf: 'flex-end', alignItems: 'flex-end', marginTop: 18, padding: 6, borderRadius: radius.xs, backgroundColor: colors.accentWash },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: GUTTER, paddingBottom: 8 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: GUTTER },
+  n: { width: 28, height: 28, borderRadius: radius.sm, backgroundColor: colors.fill, alignItems: 'center', justifyContent: 'center' },
+  nOn: { backgroundColor: colors.accent },
+  post: { marginHorizontal: GUTTER, padding: 16, borderRadius: radius.xl, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  attachment: { marginTop: 12, height: 190, borderRadius: radius.lg, backgroundColor: colors.fill, alignItems: 'center', justifyContent: 'center' },
+  miniPaper: { width: 120, height: 160, borderRadius: radius.xs, backgroundColor: colors.card, padding: 12, gap: 7, borderWidth: 1, borderColor: colors.line },
+}));

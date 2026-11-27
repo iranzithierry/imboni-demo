@@ -1,38 +1,42 @@
-import { MenuView } from '@expo/ui/community/menu';
 import { router } from 'expo-router';
 import { AsYouType, getCountryCallingCode, isSupportedCountry, isValidPhoneNumber, parsePhoneNumber, type CountryCode } from 'libphonenumber-js/min';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { useApi } from '@/data/api';
 import { useAuthParams } from '@/features/auth';
+import { useMenu } from '@/features/record/menu';
 import { toAppError, userMessage } from '@/lib/errors';
 import { haptic } from '@/lib/haptics';
 import { COUNTRIES } from '@/lib/places';
 import { usePrefs } from '@/state/prefs';
-import { Button } from '@/ui/button';
+import { Button, TextAction } from '@/ui/button';
 import { Icon } from '@/ui/icon';
-import { BackButton, NavBar } from '@/ui/nav';
+import { KeyboardDock } from '@/ui/keyboard-dock';
+import { Highlight } from '@/ui/pressable';
 import { Txt } from '@/ui/text';
-import { colors } from '@/ui/theme';
+import { createStyles, fonts, GUTTER, radius, useColors } from '@/ui/theme';
 
-const DIAL: CountryCode[] = ['RW', ...COUNTRIES.map((c) => c.code).filter(isSupportedCountry)];
+const DIAL: CountryCode[] = ['RW', ...COUNTRIES.map((c) => c.code).filter((code) => isSupportedCountry(code))];
 
 export default function PhoneNumber() {
+  const colors = useColors();
+  const styles = useStyles();
   const params = useAuthParams();
   const api = useApi();
+  const menu = useMenu();
   const place = usePrefs((s) => s.place);
-  const top = useSafeAreaInsets().top;
   const initial: CountryCode = place.mode === 'abroad' && isSupportedCountry(place.country) ? place.country : 'RW';
   const [country, setCountry] = useState<CountryCode>(initial);
   const [digits, setDigits] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(true);
 
   const formatted = new AsYouType(country).input(digits);
   const valid = digits.length > 0 && isValidPhoneNumber(digits, country);
   const helper = error ?? (valid ? 'Looks right. Codes expire after 10 minutes.' : 'Enter your mobile number without the country code.');
+  const helperTone = error ? colors.bad : valid ? colors.ok : colors.ink2;
 
   const send = async () => {
     if (!valid) return;
@@ -51,35 +55,39 @@ export default function PhoneNumber() {
     }
   };
 
+  const pickCountry = () =>
+    menu(
+      DIAL.map((c) => {
+        const name = COUNTRIES.find((x) => x.code === c)?.name ?? 'Rwanda';
+        return {
+          label: `${name} (+${getCountryCallingCode(c)})${c === country ? ' (current)' : ''}`,
+          onPress: () => {
+            haptic.selection();
+            setCountry(c);
+            setDigits('');
+          },
+        };
+      }),
+      'Country code',
+    );
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.white }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <NavBar background={colors.white} left={<BackButton label="Back" />} />
-      <View style={[styles.body, { paddingTop: top + 52 }]}>
-        <Txt v="t1" accessibilityRole="header">
+    <View style={styles.screen}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" bounces={false} contentContainerStyle={styles.body}>
+        <Txt v="title1" accessibilityRole="header">
           Your phone number
         </Txt>
-        <Txt v="co" c={colors.l2} style={{ marginTop: 6 }}>
+        <Txt v="callout" c={colors.ink2} style={{ marginTop: 8 }}>
           We’ll text you a 6-digit code. Your number is never shown to anyone.
         </Txt>
         <View style={styles.field}>
-          <MenuView
-            title="Country code"
-            actions={DIAL.map((c) => ({ id: c, title: `${COUNTRIES.find((x) => x.code === c)?.name ?? 'Rwanda'} (+${getCountryCallingCode(c)})`, state: c === country ? 'on' : 'off' }))}
-            onPressAction={({ nativeEvent }) => {
-              if (isSupportedCountry(nativeEvent.event)) {
-                haptic.selection();
-                setCountry(nativeEvent.event);
-                setDigits('');
-              }
-            }}>
-            <View style={styles.cc} accessibilityRole="button" accessibilityLabel={`Country code, plus ${getCountryCallingCode(country)}`}>
-              <Txt v="sh" w="600">
-                {country}
-              </Txt>
-              <Txt v="sh" num>{`+${getCountryCallingCode(country)}`}</Txt>
-              <Icon name="chevronDown" size={13} color={colors.l2} />
-            </View>
-          </MenuView>
+          <Highlight accessibilityRole="button" accessibilityLabel={`Country code, plus ${getCountryCallingCode(country)}`} onPress={pickCountry} style={styles.cc}>
+            <Txt v="callout" w="semibold">
+              {country}
+            </Txt>
+            <Txt v="callout" c={colors.ink2} num>{`+${getCountryCallingCode(country)}`}</Txt>
+            <Icon name="chevronDown" size={11} color={colors.ink2} weight="semibold" />
+          </Highlight>
           <TextInput
             autoFocus
             value={formatted}
@@ -87,38 +95,42 @@ export default function PhoneNumber() {
               setError(null);
               setDigits(t.replace(/\D/g, '').slice(0, 15));
             }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             keyboardType="phone-pad"
             textContentType="telephoneNumber"
             autoComplete="tel-national"
             placeholder="Mobile number"
-            placeholderTextColor={colors.l3}
-            style={styles.input}
+            placeholderTextColor={colors.ink3}
+            style={[styles.input, { borderColor: error ? colors.bad : focused ? colors.ink : colors.line }]}
             accessibilityLabel="Mobile number"
             onSubmitEditing={send}
           />
         </View>
-        <Txt v="fn" c={error ? colors.red : valid ? colors.greenText : colors.l2} style={{ marginTop: 10 }} accessibilityLiveRegion="polite">
-          {helper}
-        </Txt>
+        <View style={styles.helper} accessibilityLiveRegion="polite">
+          <Icon name={error ? 'exclamation' : valid ? 'checkCircle' : 'info'} size={14} color={helperTone} weight="semibold" />
+          <Txt v="footnote" c={helperTone} style={{ flex: 1 }}>
+            {helper}
+          </Txt>
+        </View>
         {country !== 'RW' && (
-          <Pressable accessibilityRole="button" onPress={() => setCountry('RW')} style={{ marginTop: 14 }}>
-            <Txt v="fn" w="600" c={colors.tint}>
-              Use a Rwandan number (+250)
-            </Txt>
-          </Pressable>
+          <View style={{ marginTop: 14, alignSelf: 'flex-start' }}>
+            <TextAction label="Use a Rwandan number (+250)" icon={null} color={colors.ink} onPress={() => setCountry('RW')} />
+          </View>
         )}
-      </View>
-      <View style={styles.footer}>
+      </ScrollView>
+      <KeyboardDock>
         <Button label="Send code" disabled={!valid} loading={sending} onPress={send} />
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardDock>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  body: { flex: 1, paddingHorizontal: 20 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 28, paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: colors.tint },
-  cc: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 36, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.fill },
-  input: { flex: 1, fontSize: 28, fontWeight: '600', letterSpacing: 0.5, color: colors.l1, fontVariant: ['tabular-nums'] },
-  footer: { paddingHorizontal: 16, paddingBottom: 16 },
-});
+const useStyles = createStyles((colors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  body: { paddingHorizontal: GUTTER + 4, paddingTop: 4, paddingBottom: 16 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 28 },
+  cc: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 48, paddingHorizontal: 12, borderRadius: radius.sm, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  input: { flex: 1, height: 48, paddingHorizontal: 14, borderRadius: radius.sm, borderCurve: 'continuous', borderWidth: 1, backgroundColor: colors.card, fontFamily: fonts.semibold, fontSize: 18, color: colors.ink, fontVariant: ['tabular-nums'] },
+  helper: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10 },
+}));

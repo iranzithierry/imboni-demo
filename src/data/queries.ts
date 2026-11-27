@@ -13,6 +13,8 @@ export const q = {
   institutions: (api: ImboniApi) => queryOptions({ queryKey: ['institutions'], queryFn: ({ signal }) => api.institutions(signal), staleTime: 60 * 60_000 }),
   institutionDetail: (api: ImboniApi, id: string) => queryOptions({ queryKey: ['institution', id], queryFn: ({ signal }) => api.institutionDetail(id, signal) }),
   storylines: (api: ImboniApi) => queryOptions({ queryKey: ['storylines'], queryFn: ({ signal }) => api.storylines(signal) }),
+  notices: (api: ImboniApi) => queryOptions({ queryKey: ['notices'], queryFn: ({ signal }) => api.notices(signal) }),
+  regulations: (api: ImboniApi) => queryOptions({ queryKey: ['regulations'], queryFn: ({ signal }) => api.regulations(signal), staleTime: 60 * 60_000 }),
   regulation: (api: ImboniApi, id: string) => queryOptions({ queryKey: ['regulation', id], queryFn: ({ signal }) => api.regulation(id, signal) }),
   directory: (api: ImboniApi, id: string) => queryOptions({ queryKey: ['directory', id], queryFn: ({ signal }) => api.directory(id, signal) }),
   original: (api: ImboniApi, id: string) => queryOptions({ queryKey: ['original', id], queryFn: ({ signal }) => api.original(id, signal) }),

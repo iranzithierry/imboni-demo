@@ -28,8 +28,12 @@ export const PlaceSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('rw'), district: z.string().min(1) }),
 ]);
 
+export const ThemeSchema = z.enum(['system', 'light', 'dark']);
+export type ThemePref = z.infer<typeof ThemeSchema>;
+
 export const PrefsSchema = z.object({
   onboarded: z.boolean(),
+  theme: ThemeSchema.catch('system'),
   situations: z.array(SituationSchema),
   studentLevel: z.string().nullable(),
   businessSector: z.string().nullable(),

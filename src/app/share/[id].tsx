@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
-import { StyleSheet, View, type HostInstance } from 'react-native';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import { ScrollView, StyleSheet, View, type HostInstance } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { z } from 'zod';
 
@@ -15,32 +16,32 @@ import { toAppError, userMessage } from '@/lib/errors';
 import { haptic } from '@/lib/haptics';
 import { copyLink, saveImage, shareImage, shareUrl } from '@/lib/share';
 import { usePrefs } from '@/state/prefs';
-import { GlassBadge, Gradient } from '@/ui/atoms';
-import { CircleButton } from '@/ui/button';
-import { Icon } from '@/ui/icon';
-import { Cell, Group } from '@/ui/list';
+import { IconTile, Tag } from '@/ui/atoms';
+import { Wordmark } from '@/ui/brand';
+import { IconButton } from '@/ui/button';
+import { Icon, type IconName } from '@/ui/icon';
+import { Photo } from '@/ui/photo';
+import { Highlight } from '@/ui/pressable';
 import { Segmented } from '@/ui/segmented';
 import { Txt } from '@/ui/text';
-import { colors, type GradientName } from '@/ui/theme';
+import { createStyles, GUTTER, motion, radius, useColors } from '@/ui/theme';
 import { useToast } from '@/ui/toast';
 
-const LANGS = [
-  { value: 'EN', label: 'EN' },
-  { value: 'FR', label: 'FR' },
-  { value: 'RW', label: 'RW' },
-] as const;
-/** Card chrome per language. Kinyarwanda strings stay as the design's placeholders until translated. */
+/** Card labels per language. Kinyarwanda wording should go through the shared glossary before launch. */
 const CHROME: Record<Language, { required: string; until: string; source: string; inForce: string }> = {
-  EN: { required: 'Required', until: 'until', source: 'Source', inForce: 'In force' },
-  FR: { required: 'Obligatoire', until: 'jusqu’au', source: 'Source', inForce: 'En vigueur' },
-  RW: { required: '[Required]', until: '[until]', source: '[Source]', inForce: '[In force]' },
+  EN: { required: 'Required', until: 'until', source: 'Source', inForce: 'In force from' },
+  FR: { required: 'Obligatoire', until: 'jusqu’au', source: 'Source', inForce: 'En vigueur le' },
+  RW: { required: 'Birategetswe', until: 'kugeza', source: 'Inkomoko', inForce: 'Gukurikizwa guhera' },
 };
 const Params = z.object({ id: z.string(), kind: z.enum(['action', 'regulation']).catch('action') });
 
-type CardModel = { gradient: GradientName; required: boolean; institution: string; title: string; boxes: { k: string; v: string }[]; source: string; link: RouteRef };
+type CardModel = { photo?: string; required: boolean; institution: string; title: string; boxes: { k: string; v: string }[]; source: string; link: RouteRef };
 
 export default function ShareScreen() {
+  const colors = useColors();
+  const styles = useStyles();
   const { id, kind } = Params.parse(useLocalSearchParams());
+  const insets = useSafeAreaInsets();
   const preferred = usePrefs((s) => s.contentLanguage);
   const [lang, setLang] = useState<Language>(preferred);
   const [copied, setCopied] = useState(false);
@@ -56,17 +57,17 @@ export default function ShareScreen() {
   if (kind === 'action' && action) {
     const i = inst(action.institutionId);
     model = {
-      gradient: action.icon === 'banknote' ? 'banknote' : 'brand',
+      photo: action.photo,
       required: action.required,
       institution: i.nameI18n?.[lang] ?? i.name,
       title: action.titleI18n?.[lang] ?? action.title,
-      boxes: action.phases.length ? action.phases.map((p) => ({ k: `${p.label.split(' ')[0]} ${c.until}`, v: date(p.to) })) : [{ k: c.until, v: date(action.deadline) }],
+      boxes: action.phases.length ? action.phases.map((p) => ({ k: `${p.label} ${c.until}`, v: date(p.to) })) : [{ k: c.until, v: date(action.deadline) }],
       source: `${c.source}: ${action.source.label}`,
       link: { kind: 'action', id: action.id },
     };
   } else if (kind === 'regulation' && reg.data) {
     const r = reg.data;
-    model = { gradient: 'law', required: false, institution: inst(r.institutionId).name, title: r.title[lang], boxes: [{ k: c.inForce, v: date(r.inForce) }], source: `${c.source}: ${r.reference}`, link: { kind: 'regulation', id: r.id } };
+    model = { photo: 'parliament', required: false, institution: inst(r.institutionId).name, title: r.title[lang], boxes: [{ k: c.inForce, v: date(r.inForce) }], source: `${c.source}: ${r.reference}`, link: { kind: 'regulation', id: r.id } };
   }
   if (!model) return <View style={styles.screen} />;
   const m = model;
@@ -81,74 +82,86 @@ export default function ShareScreen() {
       }
     } catch (e) {
       const err = toAppError(e);
-      if (err.code !== 'cancelled') toast({ message: userMessage(err.code), icon: 'warning', iconColor: colors.orange });
+      if (err.code !== 'cancelled') toast({ message: userMessage(err.code), icon: 'warning' });
     }
   };
 
   return (
     <View style={styles.screen}>
-      <View style={styles.closeRow}>
-        <CircleButton icon="xmark" label="Close" variant="glass" onPress={() => router.back()} />
+      <View style={[styles.closeRow, { paddingTop: Math.max(insets.top, 12) }]}>
+        <Txt v="callout" w="semibold" c={colors.white}>
+          Share
+        </Txt>
+        <IconButton icon="xmark" label="Close" variant="onDark" size={36} onPress={() => router.back()} />
       </View>
-      <Animated.View entering={ZoomIn.springify().damping(16)} style={{ paddingHorizontal: 40 }}>
-        <View ref={card} collapsable={false} style={styles.card}>
-          <Gradient name={m.gradient} />
-          <View style={styles.between}>
-            <View style={styles.brand}>
-              <View style={styles.brandIcon}>
-                <Icon name="eye" size={13} color={colors.white} />
+      <ScrollView contentContainerStyle={{ paddingBottom: 240 }}>
+        <View style={{ paddingHorizontal: 32 }}>
+          <View ref={card} collapsable={false} style={styles.card}>
+            {m.photo && <Photo id={m.photo} aspect={2} radius={radius.lg} />}
+            <Animated.View key={lang} entering={FadeIn.duration(motion.fast)} style={{ padding: 12, paddingTop: 14 }}>
+              <View style={styles.between}>
+                <Txt v="caption" c={colors.ink2} numberOfLines={1} style={{ flex: 1 }}>
+                  {m.institution}
+                </Txt>
+                {m.required && <Tag label={c.required} tone="ink" />}
               </View>
-              <Txt v="c1" w="600" c={colors.white}>
-                Imboni
+              <Txt v="title2" style={{ marginTop: 8 }}>
+                {m.title}
               </Txt>
-            </View>
-            {m.required && <GlassBadge label={c.required} />}
+              <View style={styles.boxes}>
+                {m.boxes.map((b) => (
+                  <View key={b.k} style={styles.box}>
+                    <Txt v="caption" c={colors.ink2}>
+                      {b.k}
+                    </Txt>
+                    <Txt v="callout" w="semibold" num>
+                      {b.v}
+                    </Txt>
+                  </View>
+                ))}
+              </View>
+              <Txt v="caption" c={colors.ink3} style={{ marginTop: 12 }}>
+                {m.source}
+              </Txt>
+              <View style={styles.cardFoot}>
+                <Wordmark size={18} />
+                <Txt v="caption" c={colors.ink3}>
+                  Independent · not a government app
+                </Txt>
+              </View>
+            </Animated.View>
           </View>
-          <Animated.View key={lang} entering={FadeIn}>
-            <Txt v="c1" c="rgba(255,255,255,0.85)" style={{ marginTop: 16 }}>
-              {m.institution}
-            </Txt>
-            <Txt v="t2" c={colors.white} style={{ marginTop: 2 }}>
-              {m.title}
-            </Txt>
-            <View style={styles.boxes}>
-              {m.boxes.map((b) => (
-                <View key={b.k} style={styles.box}>
-                  <Txt v="c1" c="rgba(255,255,255,0.8)">
-                    {b.k}
-                  </Txt>
-                  <Txt v="hl" num c={colors.white}>
-                    {b.v}
-                  </Txt>
-                </View>
-              ))}
-            </View>
-            <Txt v="c2" c="rgba(255,255,255,0.75)" style={{ marginTop: 14 }}>
-              {m.source}
-            </Txt>
-          </Animated.View>
+          <View style={styles.langs}>
+            <Segmented
+              accessibilityLabel="Card language"
+              options={[
+                { value: 'EN', label: 'English' },
+                { value: 'FR', label: 'Français' },
+                { value: 'RW', label: 'Kinyarwanda' },
+              ]}
+              value={lang}
+              onChange={setLang}
+            />
+          </View>
         </View>
-        <View style={{ alignSelf: 'center', width: 170, marginTop: 12 }}>
-          <Segmented dark accessibilityLabel="Card language" options={LANGS} value={lang} onChange={setLang} />
-        </View>
-      </Animated.View>
-      <View style={styles.sheet}>
-        <View style={styles.grab} />
+      </ScrollView>
+      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.linkRow}>
+          <IconTile icon="link" size={40} />
           <View style={{ flex: 1 }}>
-            <Txt v="sh" w="600" numberOfLines={1}>
+            <Txt v="subhead" w="semibold" numberOfLines={1}>
               {m.title}
             </Txt>
-            <Txt v="fn" c={colors.l2} numberOfLines={1}>
+            <Txt v="footnote" c={colors.ink2} numberOfLines={1}>
               {shareUrl(m.link)}
             </Txt>
           </View>
         </View>
-        <Group>
-          <Cell left={<Icon name="share" size={20} color={colors.tint} />} title="Share image…" onPress={() => run(async () => shareImage(await capture(), m.title))} />
-          <Cell
-            left={<Icon name={copied ? 'check' : 'link'} size={20} color={copied ? colors.green : colors.tint} />}
-            title={copied ? 'Copied' : 'Copy link'}
+        <View style={styles.actions}>
+          <ShareAction icon="share" label="Share" onPress={() => run(async () => shareImage(await capture(), m.title))} />
+          <ShareAction
+            icon={copied ? 'check' : 'copy'}
+            label={copied ? 'Copied' : 'Copy link'}
             onPress={() =>
               run(async () => {
                 await copyLink(m.link);
@@ -157,23 +170,40 @@ export default function ShareScreen() {
               })
             }
           />
-          <Cell left={<Icon name="download" size={20} color={colors.tint} />} title="Save image" onPress={() => run(async () => saveImage(await capture()), 'Saved to Photos')} />
-        </Group>
+          <ShareAction icon="download" label="Save image" onPress={() => run(async () => saveImage(await capture()), 'Saved to Photos')} />
+        </View>
+        <Txt v="caption" c={colors.ink3}>
+          The link opens a public page with the source. No sign-in, no personal data.
+        </Txt>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#000' },
-  closeRow: { alignItems: 'flex-end', padding: 16 },
-  card: { borderRadius: 22, overflow: 'hidden', padding: 20 },
-  between: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  brandIcon: { width: 20, height: 20, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
-  boxes: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  box: { flex: 1, backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 12, padding: 10 },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: 40, backgroundColor: colors.bg, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
-  grab: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.l3, alignSelf: 'center', marginTop: 6 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
-});
+function ShareAction({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const colors = useColors();
+  const styles = useStyles();
+  return (
+    <Highlight accessibilityRole="button" accessibilityLabel={label} onPress={onPress} pressedStyle={{ backgroundColor: colors.pressed }} style={styles.action}>
+      <Icon name={icon} size={20} color={colors.ink} />
+      <Txt v="footnote" w="medium">
+        {label}
+      </Txt>
+    </Highlight>
+  );
+}
+
+const useStyles = createStyles((colors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.night },
+  closeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: GUTTER, paddingBottom: 16 },
+  card: { borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: colors.card, padding: 8, overflow: 'hidden' },
+  between: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  boxes: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  box: { flex: 1, padding: 10, borderRadius: radius.md, backgroundColor: colors.fill },
+  cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line },
+  langs: { marginTop: 14 },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 16, paddingHorizontal: GUTTER, gap: 12, backgroundColor: colors.canvas, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  actions: { flexDirection: 'row', gap: 8 },
+  action: { flex: 1, height: 72, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+}));

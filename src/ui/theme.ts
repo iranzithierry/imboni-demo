@@ -1,118 +1,228 @@
-import type { TextStyle } from 'react-native';
+import { useMemo } from 'react';
+import { useColorScheme, type TextStyle } from 'react-native';
 
-export const colors = {
-  bg: '#F2F2F7',
+import { usePrefs } from '@/state/prefs';
+
+/**
+ * Two palettes with the same keys. The brand orange is the accent for actions and selected state;
+ * the hue pairs give each feature its own colour (a strong tone and a soft wash behind it).
+ */
+const light = {
+  // Brand kit: ink #2A120A and cream #FFF7F2; the greys between them are warmed to match.
+  canvas: '#FFF7F2',
   card: '#FFFFFF',
-  fill: 'rgba(118,118,128,0.12)',
-  fill2: 'rgba(118,118,128,0.08)',
-  sep: 'rgba(60,60,67,0.29)',
-  pressed: '#E5E5EA',
-  track: '#E5E5EA',
-  l1: '#000000',
-  l2: 'rgba(60,60,67,0.6)',
-  l3: 'rgba(60,60,67,0.3)',
-  tint: '#0A52E9',
-  tintPressed: '#0844C2',
-  green: '#34C759',
-  red: '#FF3B30',
-  orange: '#FF9500',
-  yellow: '#FFCC00',
-  teal: '#30B0C7',
-  indigo: '#5856D6',
-  purple: '#AF52DE',
-  pink: '#FF2D55',
-  gray: '#8E8E93',
-  mint: '#00C7BE',
-  brown: '#A2845E',
-  black: '#1C1C1E',
+  ink: '#2A120A',
+  ink2: '#77665E',
+  ink3: '#9D8D85',
+  pearl: '#D9CBC3',
+  line: '#EFE3DB',
+  fill: '#F7ECE5',
+  pressed: '#F2E5DD',
+  night: '#2A120A',
+  nightRaised: '#3D2218',
+  nightLine: '#4E3024',
+  nightInk2: '#C9B8AF',
+  accent: '#FA4616',
+  accentEdge: '#C2360F',
+  accentWash: '#FFEEE7',
+  accentInk: '#C93A10',
+  onAccent: '#FFFFFF',
+  ok: '#15803D',
+  okWash: '#E6F6EC',
+  warn: '#B45309',
+  warnWash: '#FEF3E0',
+  bad: '#D92D20',
+  badWash: '#FDECEA',
+  indigo: '#5150D6',
+  indigoWash: '#EDEDFD',
+  green: '#16A34A',
+  greenWash: '#E7F7EE',
+  amber: '#D97706',
+  amberWash: '#FEF3DF',
+  sky: '#0284C7',
+  skyWash: '#E2F2FB',
+  violet: '#7C4DE8',
+  violetWash: '#F1EBFE',
+  pink: '#D9306F',
+  pinkWash: '#FCE8F0',
+  teal: '#0E8F86',
+  tealWash: '#E0F4F2',
   white: '#FFFFFF',
-  greenText: '#248A3D',
-  orangeText: '#C93400',
-  redText: '#D70015',
-  highlight: 'rgba(255,204,0,0.55)',
-  highlightDim: 'rgba(255,204,0,0.14)',
-  dark: {
-    bg: '#000000',
-    card: '#1C1C1E',
-    sep: '#2C2C2E',
-    sepStrong: '#38383A',
-    l2: 'rgba(235,235,245,0.6)',
-    l3: 'rgba(235,235,245,0.45)',
-    tint: '#6D9BFF',
-    green: '#30D158',
-    red: '#FF453A',
-    neutral: '#636366',
-    orange: '#FF9F0A',
-  },
+  scrim: 'rgba(0,0,0,0.42)',
+};
+
+export type Palette = typeof light;
+
+const dark: Palette = {
+  canvas: '#111111',
+  card: '#1C1C1E',
+  ink: '#F5F5F7',
+  ink2: '#AEAEB2',
+  ink3: '#8E8E93',
+  pearl: '#48484A',
+  line: '#2C2C2E',
+  fill: '#2C2C2E',
+  pressed: '#2A2A2D',
+  night: '#2C2C2E',
+  nightRaised: '#3A3A3C',
+  nightLine: '#48484A',
+  nightInk2: '#AEAEB2',
+  accent: '#FF5A24',
+  accentEdge: '#B8330D',
+  accentWash: '#3A1C12',
+  accentInk: '#FF8D63',
+  onAccent: '#FFFFFF',
+  ok: '#34D27B',
+  okWash: '#10301E',
+  warn: '#FFB547',
+  warnWash: '#36260C',
+  bad: '#FF6259',
+  badWash: '#3C1614',
+  indigo: '#9898FF',
+  indigoWash: '#20203F',
+  green: '#3DDC84',
+  greenWash: '#10301E',
+  amber: '#FBBF24',
+  amberWash: '#36280A',
+  sky: '#4CC2FF',
+  skyWash: '#0C2838',
+  violet: '#B79CFF',
+  violetWash: '#281E44',
+  pink: '#FF6FA8',
+  pinkWash: '#3D1428',
+  teal: '#3ED7C6',
+  tealWash: '#0C2E2A',
+  white: '#FFFFFF',
+  scrim: 'rgba(0,0,0,0.6)',
+};
+
+export const palettes = { light, dark } as const;
+export type Scheme = keyof typeof palettes;
+
+/** The scheme the app is showing: the one chosen in Profile, or the system's. Works on the web too. */
+export function useScheme(): Scheme {
+  const pref = usePrefs((s) => s.theme);
+  const system = useColorScheme();
+  if (pref === 'light' || pref === 'dark') return pref;
+  return system === 'dark' ? 'dark' : 'light';
+}
+
+export function useColors(): Palette {
+  return palettes[useScheme()];
+}
+
+/** Styles that depend on the palette, built once per palette and shared by every instance. */
+export function createStyles<T>(factory: (colors: Palette) => T): () => T {
+  const cache = new Map<Palette, T>();
+  return function useStyles() {
+    const colors = useColors();
+    return useMemo(() => {
+      let built = cache.get(colors);
+      if (!built) {
+        built = factory(colors);
+        cache.set(colors, built);
+      }
+      return built;
+    }, [colors]);
+  };
+}
+
+export type Status = 'neutral' | 'ok' | 'warn' | 'bad';
+
+export function statusColors(colors: Palette, s: Status): { fg: string; bg: string } {
+  switch (s) {
+    case 'ok':
+      return { fg: colors.ok, bg: colors.okWash };
+    case 'warn':
+      return { fg: colors.warn, bg: colors.warnWash };
+    case 'bad':
+      return { fg: colors.bad, bg: colors.badWash };
+    default:
+      return { fg: colors.ink2, bg: colors.fill };
+  }
+}
+
+/**
+ * Interface colours are deliberately few: accent, background, muted, text and muted text, plus red for
+ * destructive or urgent things. Hue names are kept as call-site vocabulary, but outside `brand` and `red`
+ * they all resolve to the muted pair. Real colour is reserved for charts and illustrations.
+ */
+export type Hue = 'brand' | 'indigo' | 'green' | 'amber' | 'sky' | 'violet' | 'pink' | 'teal' | 'red';
+
+export function hueColors(colors: Palette, h: Hue): { fg: string; bg: string } {
+  switch (h) {
+    case 'brand':
+      return { fg: colors.accent, bg: colors.accentWash };
+    case 'red':
+      return { fg: colors.bad, bg: colors.badWash };
+    default:
+      return { fg: colors.ink, bg: colors.fill };
+  }
+}
+
+/** Real hues, for charts and for the tiles that hold illustrations and feature icons. */
+export function featureColors(colors: Palette, h: Hue): { fg: string; bg: string } {
+  if (h === 'brand' || h === 'red') return hueColors(colors, h);
+  return { fg: colors[h], bg: colors[`${h}Wash`] };
+}
+
+/** A fill deep enough to carry white text in either scheme. */
+export function solidHue(h: Hue): string {
+  if (h === 'red') return palettes.light.bad;
+  if (h === 'brand') return palettes.light.accent;
+  return palettes.light[h];
+}
+
+/** The only radii in the system. Avatars are circles by shape, not by token. */
+export const radius = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
+
+export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, section: 36 } as const;
+export const GUTTER = 20;
+
+export const fonts = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
 } as const;
 
-/** Accent swatches used for tiles, initials and markers. */
-export const swatch = {
-  tint: colors.tint,
-  green: colors.green,
-  red: colors.red,
-  orange: colors.orange,
-  yellow: colors.yellow,
-  teal: colors.teal,
-  indigo: colors.indigo,
-  purple: colors.purple,
-  pink: colors.pink,
-  gray: colors.gray,
-  mint: colors.mint,
-  brown: colors.brown,
-  black: colors.black,
-} as const;
-export type Swatch = keyof typeof swatch;
+/** Inter throughout; semibold is the heaviest weight, for headings and emphasis. */
+export type Weight = 'regular' | 'medium' | 'semibold' | 'bold';
+export const weightFamily: Record<Weight, string> = {
+  regular: fonts.regular,
+  medium: fonts.medium,
+  semibold: fonts.semibold,
+  bold: fonts.semibold,
+};
 
-export const tones = {
-  red: { bg: 'rgba(255,59,48,0.14)', fg: colors.redText },
-  orange: { bg: 'rgba(255,149,0,0.16)', fg: colors.orangeText },
-  green: { bg: 'rgba(52,199,89,0.16)', fg: colors.greenText },
-  blue: { bg: 'rgba(10,82,233,0.12)', fg: colors.tint },
-  gray: { bg: colors.fill, fg: colors.l2 },
-} as const;
-export type Tone = keyof typeof tones;
-
-/** Brand gradients from the design, used as two-stop fills. */
-export const gradients = {
-  banknote: ['#8A5A1F', '#D69E2E'],
-  brand: ['#1E3A8A', '#0A52E9'],
-  law: ['#3A38B8', '#7D7BE8'],
-  institution: ['#2F6BFF', '#0A3FB8'],
-  embassy: ['#7A78F0', '#5856D6'],
-  calendar: ['#FF5E57', '#FF2D55'],
-  roads: ['#FFB340', '#FF9500'],
-  rates: ['#3ED37A', '#1FA855'],
-  directory: ['#4A86FF', '#0A52E9'],
-  truth: ['#48C9D8', '#30A0B7'],
-  rain: ['#3F6BFF', '#1A0F2E'],
-  note500: ['#1F7A5A', '#34C759'],
-  note1000: ['#5856D6', '#AF52DE'],
-  note2000: ['#0A52E9', '#30B0C7'],
-} as const;
-export type GradientName = keyof typeof gradients;
-
-const em = (size: number, value: number) => size * value;
+const track = (size: number, em: number) => size * em;
 
 export const type = {
-  lt: { fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: em(34, 0.01) },
-  t1: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: em(28, 0.01) },
-  t2: { fontSize: 22, lineHeight: 28, fontWeight: '700', letterSpacing: em(22, 0.01) },
-  t3: { fontSize: 20, lineHeight: 25, fontWeight: '600', letterSpacing: em(20, 0.01) },
-  hl: { fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: em(17, -0.01) },
-  bd: { fontSize: 17, lineHeight: 22, fontWeight: '400', letterSpacing: em(17, -0.01) },
-  co: { fontSize: 16, lineHeight: 21, fontWeight: '400', letterSpacing: em(16, -0.01) },
-  sh: { fontSize: 15, lineHeight: 20, fontWeight: '400', letterSpacing: em(15, -0.01) },
-  fn: { fontSize: 13, lineHeight: 18, fontWeight: '400', letterSpacing: 0 },
-  c1: { fontSize: 12, lineHeight: 16, fontWeight: '400', letterSpacing: 0 },
-  c2: { fontSize: 11, lineHeight: 13, fontWeight: '400', letterSpacing: em(11, 0.01) },
-  cap: { fontSize: 13, lineHeight: 18, fontWeight: '600', letterSpacing: em(13, 0.02), textTransform: 'uppercase' },
+  display: { fontFamily: fonts.semibold, fontSize: 46, lineHeight: 50, letterSpacing: track(46, -0.03) },
+  title1: { fontFamily: fonts.semibold, fontSize: 30, lineHeight: 36, letterSpacing: track(30, -0.022) },
+  title2: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 30, letterSpacing: track(24, -0.02) },
+  title3: { fontFamily: fonts.semibold, fontSize: 19, lineHeight: 25, letterSpacing: track(19, -0.016) },
+  headline: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22, letterSpacing: track(16, -0.011) },
+  body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, letterSpacing: track(16, -0.011) },
+  callout: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 21, letterSpacing: track(15, -0.009) },
+  subhead: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, letterSpacing: track(14, -0.006) },
+  footnote: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, letterSpacing: track(13, -0.003) },
+  caption: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, letterSpacing: 0 },
 } as const satisfies Record<string, TextStyle>;
 export type TypeVariant = keyof typeof type;
 
-export const radius = { tile: 7, tileL: 9, tileXL: 14, group: 12, card: 16, tileCard: 18, hero: 22, btn: 14, seg: 9, pill: 17 } as const;
+/** Display sizes stop growing earlier so headlines keep their shape at large text sizes. */
+export const maxScale: Record<TypeVariant, number> = {
+  display: 1.2,
+  title1: 1.3,
+  title2: 1.4,
+  title3: 1.5,
+  headline: 1.8,
+  body: 1.8,
+  callout: 1.8,
+  subhead: 1.8,
+  footnote: 1.8,
+  caption: 1.6,
+};
 
-export const space = { gutter: 16, gutterWide: 20, groupHeaderX: 32 } as const;
-
-/** iOS sheet/sliding spring from the design (--spring: cubic-bezier(.32,.72,0,1)). */
-export const spring = { damping: 26, stiffness: 260, mass: 1 } as const;
+/** Motion is for state changes: short and eased. */
+export const motion = { fast: 120, base: 200, slow: 280 } as const;

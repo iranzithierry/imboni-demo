@@ -14,6 +14,8 @@ export function toHref(ref: RouteRef): Href {
       return '/rates';
     case 'traffic':
       return '/traffic';
+    case 'reports':
+      return '/reports';
     case 'action':
       return { pathname: '/action/[id]', params: { id: ref.id } };
     case 'what_changed':
@@ -30,6 +32,10 @@ export function toHref(ref: RouteRef): Href {
       return { pathname: '/directory/[id]', params: { id: ref.id } };
     case 'advisory':
       return { pathname: '/advisory/[id]', params: { id: ref.id } };
+    case 'notice':
+      return { pathname: '/notice/[id]', params: { id: ref.id } };
+    case 'alert':
+      return { pathname: '/alert/[id]', params: { id: ref.id } };
     default: {
       const exhaustive: never = ref;
       return exhaustive;
